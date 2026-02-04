@@ -13,15 +13,42 @@ cache = Cache(ttl=30)
 
 FINNHUB_QUOTE = "https://finnhub.io/api/v1/quote"
 
-# IBKR connector (if enabled)
-ibkr_connector = None
+# IBKR connector with lazy loading
+_ibkr_connector = None
+_ibkr_init_attempted = False
 
-if USE_IBKR_DATA:
+
+def _get_ibkr_connector():
+    """
+    Lazy loading for IBKR connector.
+    Only initializes once, caches result (including failures).
+    """
+    global _ibkr_connector, _ibkr_init_attempted
+
+    if _ibkr_init_attempted:
+        return _ibkr_connector
+
+    _ibkr_init_attempted = True
+
+    if not USE_IBKR_DATA:
+        return None
+
     try:
         from src.ibkr_connector import get_ibkr
-        ibkr_connector = get_ibkr()
-    except:
-        pass
+        _ibkr_connector = get_ibkr()
+        if _ibkr_connector and _ibkr_connector.connected:
+            logger.info("PM Scanner: IBKR connector initialized")
+        else:
+            logger.debug("PM Scanner: IBKR not connected, using Finnhub fallback")
+            _ibkr_connector = None
+    except ImportError:
+        logger.debug("PM Scanner: IBKR connector not available")
+        _ibkr_connector = None
+    except Exception as e:
+        logger.debug(f"PM Scanner: IBKR init failed: {e}")
+        _ibkr_connector = None
+
+    return _ibkr_connector
 
 
 # ============================
@@ -29,12 +56,13 @@ if USE_IBKR_DATA:
 # ============================
 
 def fetch_quote(ticker):
-    """Fetch quote from IBKR (if available) or Finnhub"""
-    
-    # Try IBKR first
-    if ibkr_connector and ibkr_connector.connected:
+    """Fetch quote from IBKR (if available) or Finnhub fallback"""
+
+    # Try IBKR first (lazy load)
+    ibkr = _get_ibkr_connector()
+    if ibkr and ibkr.connected:
         try:
-            quote = ibkr_connector.get_quote(ticker)
+            quote = ibkr.get_quote(ticker)
             if quote:
                 # Convert IBKR format to Finnhub-like format
                 return {

@@ -1,6 +1,6 @@
 # 🚀 GV2-EDGE — Système de Détection Anticipative des Top Gainers
 
-**Version 5.0 - Anticipation Engine**
+**Version 5.3 - Full Intelligence Integration**
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -133,11 +133,12 @@ La plupart des systèmes de détection de top gainers:
 - Clinical trial results tracking
 - Biotech conferences monitoring
 
-#### 🧠 **Intelligence Modules (V4)**
-- **Historical Beat Rate**: Prédit earnings beats (85%+ accuracy)
+#### 🧠 **Intelligence Modules (V5.3 - Fully Integrated)**
+- **Historical Beat Rate**: Prédit earnings beats (85%+ accuracy) - Boost additionnel
 - **FDA Calendar**: PDUFA + trials + conferences (biotech focus)
-- **Options Flow**: Unusual activity detection (smart money)
-- **Social Buzz**: Twitter + Reddit + StockTwits + Google Trends
+- **Options Flow**: Volume & concentration analysis (10% du score) - **CORE COMPONENT**
+- **Social Buzz**: Twitter + Reddit + StockTwits (6% du score) - **CORE COMPONENT**
+- **Extended Hours**: After-hours & pre-market gap detection - Boost additionnel
 
 #### 📊 **Technical Analysis**
 - Pattern recognition (volume climax, consolidation, higher lows)
@@ -452,26 +453,35 @@ Friday 22:00 UTC → Weekly deep audit
 
 ---
 
-### 3. Options Flow Monitor
+### 3. Options Flow Monitor (V5.3 - CORE COMPONENT)
 
-**Fonction :** Détecte activité options inhabituelle
-- Volume vs Open Interest
-- Call/Put ratio
-- Block trades
+**Fonction :** Détecte activité options inhabituelle via IBKR OPRA L1
 
-**Impact :** +0.00 à +0.10 sur Monster Score
+**Signaux détectés :**
+- `HIGH_CALL_VOLUME` : Volume calls >= 5000 contracts
+- `LOW_PC_RATIO` : Put/Call < 0.5 (bullish sentiment)
+- `CALL_CONCENTRATION` : 70%+ du volume en calls
+- `HIGH_OPTIONS_VOLUME` : Volume total >= 10,000
+
+**Note V5.3 :** Le ratio Volume/OI est DÉSACTIVÉ car l'OI est délayé (J-1) et peu fiable pour les small caps. L'analyse se base sur le volume absolu et la concentration.
+
+**Impact :** 10% du Monster Score (composante core, pas un boost)
 
 ---
 
-### 4. Social Buzz Tracker
+### 4. Social Buzz Tracker (V5.3 - CORE COMPONENT)
 
-**Fonction :** Mesure volume mentions
-- Twitter/X (Grok API)
-- Reddit WallStreetBets
-- StockTwits
-- Google Trends
+**Fonction :** Mesure volume mentions et détecte les spikes
 
-**Impact :** +0.00 à +0.10 sur Monster Score
+**Sources actives :**
+- Twitter/X (via Grok API) - 35% du score buzz
+- Reddit WallStreetBets - 25% du score buzz
+- StockTwits - 20% du score buzz
+- Google Trends - 20% du score buzz
+
+**Scoring :** Score combiné 0-1, spike détecté si buzz > 3x baseline
+
+**Impact :** 6% du Monster Score (composante core, pas un boost)
 
 ---
 
@@ -508,11 +518,12 @@ Result: ✅ Detected 7 days early, positioned optimally
 
 ## 📚 Documentation
 
-- `README.md` - Ce fichier
-- `AMELIORATIONS_V4_INSTITUTIONAL.md` - Guide modules intelligence
-- `IBKR_LEVEL1_GUIDE.md` - Configuration IBKR
-- `AUDIT_COMPLET_SYSTEME.md` - Audit & timing
-- `QUICKSTART.md` - Guide démarrage rapide
+- `README.md` - Ce fichier (vue d'ensemble)
+- `README_DEV.md` - Guide développeur (architecture technique)
+- `README_TRADER.md` - Guide trader (utilisation trading)
+- `DEPLOYMENT.md` - **Guide de déploiement complet** (installation, serveur, Docker)
+- `QUICKSTART.md` - Guide démarrage rapide (5 minutes)
+- `IBKR_LEVEL1_GUIDE.md` - Configuration IBKR détaillée
 
 ---
 
@@ -596,11 +607,21 @@ MIT License - Copyright (c) 2026 GV2-EDGE Project
 
 ---
 
-**Version:** 5.1.0  
-**Last Updated:** 2026-02-03  
+**Version:** 5.3.0
+**Last Updated:** 2026-02-04
 **Status:** Production Ready ✅
 
-### Changelog V5.1 (Latest)
+### Changelog V5.3 (Latest)
+- ✅ **Options Flow CORE Integration** : Intégré dans Monster Score (10% weight)
+- ✅ **Social Buzz CORE Integration** : Intégré dans Monster Score (6% weight)
+- ✅ **Volume/OI Ratio Disabled** : Remplacé par volume absolu + concentration (plus stable)
+- ✅ **New Scoring Weights V3** : Rééquilibrage complet (8 composantes)
+- ✅ **DEPLOYMENT.md** : Guide de déploiement complet (serveur, Docker, cron)
+- ✅ **Lazy Loading Imports** : Imports IBKR robustes avec fallback
+- ✅ **Dashboard Fixes** : Heatmap données réelles, DB path corrigé
+- ✅ **Validation Fixes** : WATCH_EARLY accepté comme signal valide
+
+### Changelog V5.1
 - ✅ **News Flow Screener** : Détection globale NEWS → NLP → mapping tickers
 - ✅ **Options Flow via IBKR OPRA** : Détection smart money (volume, P/C ratio)
 - ✅ **Extended Hours Quotes** : After-hours & pre-market gaps temps réel

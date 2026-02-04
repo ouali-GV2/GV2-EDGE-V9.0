@@ -1,12 +1,41 @@
-# 📘 GV2-EDGE V5.1 — Developer Documentation
+# 📘 GV2-EDGE V5.3 — Developer Documentation
 
 ## 🎯 Objectif
 
 Ce document explique :
-- L'architecture technique V5 (Anticipation Engine)
+- L'architecture technique V5.3 (Full Intelligence Integration)
 - Le rôle de chaque module
-- Les flux de données
+- Les flux de données et le scoring
 - Comment étendre le système
+
+---
+
+## 🆕 Changements V5.3
+
+### Monster Score V3 - Nouveau Système de Poids
+
+```python
+ADVANCED_MONSTER_WEIGHTS = {
+    "event": 0.25,          # Catalysts (earnings, FDA, M&A)
+    "volume": 0.17,         # Volume spikes
+    "pattern": 0.17,        # Technical patterns
+    "pm_transition": 0.13,  # PM→RTH transition
+    "momentum": 0.08,       # Price momentum
+    "squeeze": 0.04,        # Bollinger squeeze
+    "options_flow": 0.10,   # NEW: Options activity (volume + concentration)
+    "social_buzz": 0.06,    # NEW: Social media buzz
+}
+# Total = 100%
+```
+
+### Options Flow - Changements
+
+- Volume/OI ratio **DÉSACTIVÉ** (OI delayed J-1, peu fiable)
+- Nouveaux signaux basés sur volume absolu:
+  - `HIGH_CALL_VOLUME` : >= 5000 contracts
+  - `LOW_PC_RATIO` : Put/Call < 0.5
+  - `CALL_CONCENTRATION` : 70%+ calls
+  - `HIGH_OPTIONS_VOLUME` : >= 10,000 total
 
 ---
 
@@ -141,21 +170,25 @@ aggregate_events_by_ticker()   # Groupement par ticker
 run_news_flow_screener(universe, hours_back=6)
 ```
 
-### options_flow_ibkr.py
+### options_flow_ibkr.py (V5.3 - Updated)
 
-**Rôle** : Détection options via OPRA L1
+**Rôle** : Détection options via IBKR OPRA L1 (volume-based)
 
 ```python
-# Signaux détectés
-VOLUME_SPIKE      # Volume >> Open Interest
-LOW_PC_RATIO      # Put/Call < 0.5
-CALL_CONCENTRATION # 70%+ calls
-HIGH_OPTIONS_VOLUME # >10k volume
+# Signaux détectés (V5.3 - Volume based, NO OI ratio)
+HIGH_CALL_VOLUME    # Call volume >= 5000 contracts
+LOW_PC_RATIO        # Put/Call < 0.5 (bullish)
+CALL_CONCENTRATION  # 70%+ calls
+HIGH_OPTIONS_VOLUME # Total volume >= 10k
 
-# Entry point
-scan_options_flow(tickers)
-get_options_flow_score(ticker)
+# NOTE: Volume/OI ratio DISABLED (OI is delayed J-1)
+
+# Entry points
+scan_options_flow(tickers)      # Batch scan
+get_options_flow_score(ticker)  # Single ticker score
 ```
+
+**Impact V5.3** : 10% du Monster Score (composante core)
 
 ### extended_hours_quotes.py
 
@@ -261,5 +294,35 @@ data/logs/
 
 ---
 
-**Version:** 5.1.0  
-**Last Updated:** 2026-02-03
+---
+
+## 📊 Flux de Données Scoring V5.3
+
+```
+Universe Loader (300-500 tickers)
+        ↓
+Feature Engine + Event Hub + PM Scanner
+        ↓
+Pattern Analyzer + Options Flow + Social Buzz
+        ↓
+Monster Score V3 (8 composantes pondérées)
+├── event (25%)
+├── volume (17%)
+├── pattern (17%)
+├── pm_transition (13%)
+├── options_flow (10%)  ← NEW CORE
+├── momentum (8%)
+├── social_buzz (6%)    ← NEW CORE
+└── squeeze (4%)
+        ↓
+Signal Engine (BUY/BUY_STRONG/WATCH_EARLY)
+        ↓
+Portfolio Engine (risk management)
+        ↓
+Output (Telegram + SQLite + Dashboard)
+```
+
+---
+
+**Version:** 5.3.0
+**Last Updated:** 2026-02-04

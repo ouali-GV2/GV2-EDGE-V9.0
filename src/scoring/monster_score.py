@@ -1,3 +1,20 @@
+"""
+MONSTER SCORE V3 - Composite Scoring Engine
+============================================
+
+Calculates a comprehensive score (0-1) for each ticker based on:
+- Event impact (earnings, FDA, M&A, etc.)
+- Volume spikes
+- Technical patterns
+- Pre-market transition
+- Momentum
+- Squeeze indicators
+- Options flow (NEW V3)
+- Social buzz (NEW V3)
+
+The score determines signal strength: BUY (0.65+), BUY_STRONG (0.80+)
+"""
+
 import json
 import os
 
@@ -8,25 +25,33 @@ from src.event_engine.event_hub import get_events_by_ticker
 from src.feature_engine import compute_features
 from src.pm_scanner import compute_pm_metrics
 
-# NEW: Import advanced intelligence modules
+# Import intelligence modules with graceful fallback
 from src.historical_beat_rate import get_earnings_probability
-from src.social_buzz import get_buzz_signal
+from src.social_buzz import get_buzz_signal, get_total_buzz_score
 
-# Options flow (optional - requires IBKR subscription)
-try:
-    from src.options_flow_ibkr import get_options_flow_score
-    OPTIONS_FLOW_AVAILABLE = True
-except:
-    OPTIONS_FLOW_AVAILABLE = False
+# Import config flags
+from config import (
+    ADVANCED_MONSTER_WEIGHTS,
+    ENABLE_OPTIONS_FLOW,
+    ENABLE_SOCIAL_BUZZ
+)
+
+# Options flow (optional - requires IBKR OPRA subscription)
+OPTIONS_FLOW_AVAILABLE = False
+if ENABLE_OPTIONS_FLOW:
+    try:
+        from src.options_flow_ibkr import get_options_flow_score
+        OPTIONS_FLOW_AVAILABLE = True
+    except ImportError:
+        pass
 
 # Extended hours boost (optional - requires IBKR subscription)
+EXTENDED_HOURS_AVAILABLE = False
 try:
     from src.extended_hours_quotes import get_extended_hours_boost
     EXTENDED_HOURS_AVAILABLE = True
-except:
-    EXTENDED_HOURS_AVAILABLE = False
-
-from config import ADVANCED_MONSTER_WEIGHTS  # ✅ Use optimized weights
+except ImportError:
+    pass
 
 logger = get_logger("MONSTER_SCORE")
 
@@ -153,87 +178,106 @@ def compute_monster_score(ticker, use_advanced=True):
             logger.warning(f"Advanced scoring error for {ticker}: {e}")
             # Continue with basic scoring
     
-    # ===== INTELLIGENCE MODULES (V4 - INSTITUTIONAL GRADE) =====
+    # ===== INTELLIGENCE MODULES V3 (FULLY INTEGRATED) =====
+    # Options flow and social buzz are now CORE components (not just boosts)
+    options_flow_score = 0
+    social_buzz_score = 0
     beat_rate_boost = 0
-    social_buzz_boost = 0
-    options_boost = 0
     extended_hours_boost = 0
-    
+
     try:
-        # Check if event is earnings-related
+        # ----- OPTIONS FLOW (10% weight) -----
+        if OPTIONS_FLOW_AVAILABLE and ENABLE_OPTIONS_FLOW:
+            try:
+                opt_score, opt_details = get_options_flow_score(ticker)
+                options_flow_score = clamp(opt_score)  # 0-1
+                if options_flow_score > 0.3:
+                    logger.debug(f"{ticker} options flow: {options_flow_score:.2f}")
+            except Exception as e:
+                logger.debug(f"Options flow error for {ticker}: {e}")
+
+        # ----- SOCIAL BUZZ (6% weight) -----
+        if ENABLE_SOCIAL_BUZZ:
+            try:
+                buzz_data = get_total_buzz_score(ticker)
+                social_buzz_score = clamp(buzz_data.get("buzz_score", 0))  # 0-1
+                if social_buzz_score > 0.3:
+                    logger.debug(f"{ticker} social buzz: {social_buzz_score:.2f}")
+            except Exception as e:
+                logger.debug(f"Social buzz error for {ticker}: {e}")
+
+        # ----- BEAT RATE BOOST (additive for earnings events) -----
         events = get_events_by_ticker(ticker)
         has_earnings = any("earning" in e.get("type", "").lower() for e in events)
-        
+
         if has_earnings:
-            # Historical beat rate analysis
-            earnings_prob = get_earnings_probability(ticker)
-            
-            if earnings_prob and earnings_prob > 0.6:
-                # High probability of beat = boost score
-                beat_rate_boost = (earnings_prob - 0.5) * 0.4  # Max +0.2 boost
-                logger.info(f"{ticker} beat probability: {earnings_prob*100:.0f}% → +{beat_rate_boost:.2f}")
-        
-        # Social buzz detection
-        buzz = get_buzz_signal(ticker)
-        buzz_score = buzz.get("buzz_score", 0)
-        
-        if buzz_score > 0.5:
-            # Abnormal buzz = boost
-            social_buzz_boost = (buzz_score - 0.5) * 0.2  # Max +0.1 boost
-            logger.info(f"{ticker} buzz spike: {buzz_score:.2f} → +{social_buzz_boost:.2f}")
-        
-        # Options flow (if available)
-        if OPTIONS_FLOW_AVAILABLE:
-            options_score, options_details = get_options_flow_score(ticker)
-            
-            if options_score > 0.6:
-                options_boost = (options_score - 0.5) * 0.2  # Max +0.1 boost
-                logger.info(f"{ticker} options flow: {options_score:.2f} → +{options_boost:.2f}")
-        
-        # Extended hours boost (if available - after-hours/pre-market gaps)
+            try:
+                earnings_prob = get_earnings_probability(ticker)
+                if earnings_prob and earnings_prob > 0.6:
+                    # High probability of beat = boost score (max +0.15)
+                    beat_rate_boost = (earnings_prob - 0.5) * 0.3
+                    logger.info(f"{ticker} beat probability: {earnings_prob*100:.0f}% → +{beat_rate_boost:.2f}")
+            except Exception as e:
+                logger.debug(f"Beat rate error for {ticker}: {e}")
+
+        # ----- EXTENDED HOURS BOOST (additive for gap plays) -----
         if EXTENDED_HOURS_AVAILABLE:
-            eh_boost, eh_details = get_extended_hours_boost(ticker)
-            
-            if eh_boost > 0:
-                extended_hours_boost = eh_boost  # Max +0.22
-                logger.info(f"{ticker} extended hours: +{eh_boost:.2f} ({eh_details.get('session', 'N/A')})")
-    
+            try:
+                eh_boost, eh_details = get_extended_hours_boost(ticker)
+                if eh_boost > 0:
+                    extended_hours_boost = eh_boost  # Max +0.22
+                    logger.debug(f"{ticker} extended hours: +{eh_boost:.2f}")
+            except Exception as e:
+                logger.debug(f"Extended hours error for {ticker}: {e}")
+
     except Exception as e:
         logger.warning(f"Intelligence modules error for {ticker}: {e}")
 
-    # ===== FINAL SCORE (V5 WITH INTELLIGENCE) =====
-    # Base score from technical/fundamental
+    # ===== FINAL SCORE V3 (UNIFIED WEIGHTED SCORE) =====
+    # All components are now weighted equally in the base score
     base_score = (
-        weights.get("event", 0.30) * event_score +
-        weights.get("volume", 0.20) * volume +
-        weights.get("pattern", 0.20) * pattern_score +
-        weights.get("pm_transition", 0.15) * pm_transition_score +
-        weights.get("momentum", 0.10) * momentum +
-        weights.get("squeeze", 0.05) * squeeze
+        weights.get("event", 0.25) * event_score +
+        weights.get("volume", 0.17) * volume +
+        weights.get("pattern", 0.17) * pattern_score +
+        weights.get("pm_transition", 0.13) * pm_transition_score +
+        weights.get("momentum", 0.08) * momentum +
+        weights.get("squeeze", 0.04) * squeeze +
+        weights.get("options_flow", 0.10) * options_flow_score +
+        weights.get("social_buzz", 0.06) * social_buzz_score
     )
-    
-    # Add intelligence boosts
-    total_boost = beat_rate_boost + social_buzz_boost + options_boost + extended_hours_boost
+
+    # Add conditional boosts (beat rate + extended hours)
+    total_boost = beat_rate_boost + extended_hours_boost
     final_score = base_score + total_boost
-    
+
     # Clamp 0-1
     final_score = clamp(final_score)
 
     details = {
         "monster_score": final_score,
-        "base_score": base_score,
-        "intelligence_boost": total_boost,
+        "base_score": round(base_score, 4),
+        "intelligence_boost": round(total_boost, 4),
         "components": {
-            "event": event_score,
-            "volume": volume * weights.get("volume", 0.20),
-            "momentum": momentum * weights.get("momentum", 0.10),
-            "squeeze": squeeze * weights.get("squeeze", 0.05),
-            "pattern": pattern_score * weights.get("pattern", 0.20),
-            "pm_transition": pm_transition_score * weights.get("pm_transition", 0.15),
-            "beat_rate_boost": beat_rate_boost,
-            "social_buzz_boost": social_buzz_boost,
-            "options_boost": options_boost,
-            "extended_hours_boost": extended_hours_boost
+            "event": round(event_score * weights.get("event", 0.25), 4),
+            "volume": round(volume * weights.get("volume", 0.17), 4),
+            "pattern": round(pattern_score * weights.get("pattern", 0.17), 4),
+            "pm_transition": round(pm_transition_score * weights.get("pm_transition", 0.13), 4),
+            "momentum": round(momentum * weights.get("momentum", 0.08), 4),
+            "squeeze": round(squeeze * weights.get("squeeze", 0.04), 4),
+            "options_flow": round(options_flow_score * weights.get("options_flow", 0.10), 4),
+            "social_buzz": round(social_buzz_score * weights.get("social_buzz", 0.06), 4),
+            "beat_rate_boost": round(beat_rate_boost, 4),
+            "extended_hours_boost": round(extended_hours_boost, 4)
+        },
+        "raw_scores": {
+            "event": round(event_score, 4),
+            "volume": round(volume, 4),
+            "pattern": round(pattern_score, 4),
+            "pm_transition": round(pm_transition_score, 4),
+            "momentum": round(momentum, 4),
+            "squeeze": round(squeeze, 4),
+            "options_flow": round(options_flow_score, 4),
+            "social_buzz": round(social_buzz_score, 4)
         }
     }
 

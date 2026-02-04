@@ -110,18 +110,19 @@ DEFAULT_MONSTER_WEIGHTS = {
 }
 # Note: La somme DOIT faire 1.0 pour cohérence
 
-# Poids OPTIMISÉS V2 (avec patterns + PM transition)
-# Basé sur l'expérience momentum trading et feedback loops
+# Poids OPTIMISÉS V3 (avec options flow + social buzz)
+# Intègre les modules d'intelligence pour scoring complet
 ADVANCED_MONSTER_WEIGHTS = {
-    "event": 0.30,          # ↑ Increased (catalysts = ROI principal)
-    "volume": 0.20,         # ↑ Increased (volume = confirmation essentielle)
-    "pattern": 0.20,        # = Patterns structurels OK
-    "pm_transition": 0.15,  # = Timing PM→RTH crucial
-    "momentum": 0.10,       # ↓ Reduced (momentum suit, ne prédit pas)
-    "squeeze": 0.05,        # ↓ Reduced (low priority, corrélé avec patterns)
-    # vwap removed (déjà corrélé au price action)
+    "event": 0.25,          # ↓ 30% → 25% (catalysts toujours importants)
+    "volume": 0.17,         # ↓ 20% → 17% (confirmation essentielle)
+    "pattern": 0.17,        # ↓ 20% → 17% (patterns structurels)
+    "pm_transition": 0.13,  # ↓ 15% → 13% (timing PM→RTH)
+    "momentum": 0.08,       # ↓ 10% → 8% (momentum suit, ne prédit pas)
+    "squeeze": 0.04,        # ↓ 5% → 4% (low priority)
+    "options_flow": 0.10,   # NEW: Options activity (volume + concentration)
+    "social_buzz": 0.06,    # NEW: Social media buzz (Twitter, Reddit, StockTwits)
 }
-# Total = 1.0
+# Total = 1.0 (25+17+17+13+8+4+10+6 = 100%)
 
 # ============================
 # PATTERN ANALYZER SETTINGS
@@ -207,3 +208,20 @@ BUY_STRONG_THRESHOLD = 0.80   # Score minimum pour signal BUY_STRONG
 # ============================
 
 PM_MIN_VOLUME = 50000         # Volume minimum en pre-market pour liquidité
+
+# ============================
+# OPTIONS FLOW SETTINGS (NEW V3)
+# ============================
+
+ENABLE_OPTIONS_FLOW = True        # Enable options flow analysis
+OPTIONS_FLOW_MIN_VOLUME = 5000    # Minimum call volume for signal
+OPTIONS_FLOW_MIN_TOTAL = 10000    # Minimum total options volume
+
+# ============================
+# SOCIAL BUZZ SETTINGS (NEW V3)
+# ============================
+
+ENABLE_SOCIAL_BUZZ = True                # Enable social sentiment tracking
+SOCIAL_BUZZ_LOOKBACK_HOURS = 24          # Hours to look back for buzz
+SOCIAL_BUZZ_SPIKE_THRESHOLD = 3.0        # 3x normal = spike
+SOCIAL_BUZZ_SOURCES = ["twitter", "reddit", "stocktwits"]  # All sources enabled

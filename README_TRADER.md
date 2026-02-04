@@ -1,10 +1,35 @@
-# 📊 GV2-EDGE V5.1 — Trader Guide
+# 📊 GV2-EDGE V5.3 — Trader Guide
 
 ## 🎯 Objectif
 
 GV2-EDGE détecte les top gainers small caps US **AVANT** leurs hausses majeures (+50% à +500%).
 
 **Cible** : Small caps < $2B market cap, hors OTC
+
+---
+
+## 🆕 Nouveautés V5.3
+
+### Monster Score - Nouvelles Composantes
+
+Le score inclut maintenant **8 facteurs** pondérés :
+
+| Composante | Poids | Description |
+|------------|-------|-------------|
+| Event | 25% | Catalysts (earnings, FDA, M&A) |
+| Volume | 17% | Volume spikes vs moyenne |
+| Pattern | 17% | Patterns techniques (consolidation, flags) |
+| PM Transition | 13% | Qualité transition pre-market → RTH |
+| **Options Flow** | **10%** | Activité options (volume, concentration calls) |
+| Momentum | 8% | Momentum prix |
+| **Social Buzz** | **6%** | Mentions Twitter, Reddit, StockTwits |
+| Squeeze | 4% | Bollinger squeeze |
+
+### Impact pour le Trading
+
+- **Options Flow élevé** (>0.5) = Smart money potentiel
+- **Social Buzz spike** (>0.7) = Attention retail croissante
+- Ces facteurs peuvent confirmer ou renforcer un signal
 
 ---
 
@@ -207,5 +232,45 @@ GV2-EDGE détecte les top gainers small caps US **AVANT** leurs hausses majeures
 
 ---
 
-**Version:** 5.1.0  
-**Last Updated:** 2026-02-03
+---
+
+## 📊 Interpréter les Composantes V5.3
+
+### Options Flow (10%)
+
+| Score | Signification | Action |
+|-------|---------------|--------|
+| 0.0-0.3 | Activité normale | Neutre |
+| 0.3-0.6 | Activité légèrement élevée | Surveiller |
+| 0.6-0.8 | Activité inhabituelle | Confirme le signal |
+| 0.8-1.0 | Activité très élevée (smart money?) | Renforce confiance |
+
+**Signaux positifs** :
+- `HIGH_CALL_VOLUME` : Volume calls >= 5000
+- `LOW_PC_RATIO` : Put/Call < 0.5 (bullish)
+- `CALL_CONCENTRATION` : 70%+ du volume en calls
+
+### Social Buzz (6%)
+
+| Score | Signification | Action |
+|-------|---------------|--------|
+| 0.0-0.3 | Buzz normal | Neutre |
+| 0.3-0.5 | Buzz croissant | Surveiller |
+| 0.5-0.7 | Buzz élevé | Attention retail |
+| 0.7-1.0 | Viral/Trending | Prudence (late?) |
+
+**Sources** : Twitter (35%), Reddit WSB (25%), StockTwits (20%), Google Trends (20%)
+
+---
+
+## 🔗 Ressources
+
+- **Installation** : Voir `DEPLOYMENT.md`
+- **Architecture** : Voir `README_DEV.md`
+- **Configuration** : Voir `config.py`
+- **Dashboard** : `streamlit run dashboards/streamlit_dashboard.py`
+
+---
+
+**Version:** 5.3.0
+**Last Updated:** 2026-02-04

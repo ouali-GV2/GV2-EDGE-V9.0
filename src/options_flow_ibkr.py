@@ -216,46 +216,51 @@ class IBKROptionsScanner:
     
     def get_options_summary(self, ticker: str) -> Dict:
         """
-        Get summarized options data for a ticker
-        
-        Returns:
-        - total_call_volume
-        - total_put_volume
-        - put_call_ratio
-        - max_volume_strike
-        - volume_vs_oi_ratio
+        Get summarized options data for a ticker.
+
+        Returns volume-based metrics only (OI ratio disabled for reliability):
+        - call_volume: Total call contracts volume
+        - put_volume: Total put contracts volume
+        - total_volume: Combined volume
+        - put_call_ratio: P/C ratio for sentiment
+        - max_volume_strike: Strike with highest volume
+        - max_volume_type: CALL or PUT
+        - max_volume_expiry: Expiration date
+        - contracts_count: Number of contracts analyzed
+
+        Note: Volume/OI ratio is NOT calculated because OI is delayed (J-1)
+        and unreliable for real-time small cap analysis.
         """
         contracts = self.get_option_chain(ticker)
-        
+
         if not contracts:
             return {}
-        
+
+        # Calculate volume metrics
         call_volume = sum(c.volume for c in contracts if c.option_type == 'CALL')
         put_volume = sum(c.volume for c in contracts if c.option_type == 'PUT')
         total_volume = call_volume + put_volume
-        
-        # Find max volume strike
+
+        # Find max volume contract (highest activity)
         max_vol_contract = max(contracts, key=lambda c: c.volume) if contracts else None
-        
-        # Calculate average volume/OI ratio
-        vol_oi_ratios = []
-        for c in contracts:
-            if c.open_interest > 0:
-                vol_oi_ratios.append(c.volume / c.open_interest)
-        
-        avg_vol_oi = sum(vol_oi_ratios) / len(vol_oi_ratios) if vol_oi_ratios else 0
-        
+
+        # Calculate P/C ratio (lower = more bullish)
+        if call_volume > 0:
+            pc_ratio = put_volume / call_volume
+        else:
+            pc_ratio = 999 if put_volume > 0 else 1.0  # Default to neutral if no data
+
         return {
             'ticker': ticker,
             'call_volume': call_volume,
             'put_volume': put_volume,
             'total_volume': total_volume,
-            'put_call_ratio': put_volume / call_volume if call_volume > 0 else 999,
+            'put_call_ratio': round(pc_ratio, 3),
             'max_volume_strike': max_vol_contract.strike if max_vol_contract else 0,
             'max_volume_type': max_vol_contract.option_type if max_vol_contract else '',
             'max_volume_expiry': max_vol_contract.expiry if max_vol_contract else '',
-            'avg_volume_oi_ratio': avg_vol_oi,
             'contracts_count': len(contracts)
+            # Note: avg_volume_oi_ratio removed - OI is delayed and unreliable
         }
 
 
@@ -265,84 +270,104 @@ class IBKROptionsScanner:
 
 def detect_options_signals(ticker: str, summary: Dict) -> List[OptionsFlowSignal]:
     """
-    Detect unusual options activity signals
-    
+    Detect unusual options activity signals based on VOLUME and CONCENTRATION only.
+
+    Note: Volume/OI ratio is DISABLED because OI is delayed (J-1) and unreliable
+    for real-time small cap analysis. We focus on absolute volume and concentration
+    which are more stable indicators.
+
+    Signal Types:
+    1. HIGH_CALL_VOLUME - Significant call volume (absolute)
+    2. LOW_PC_RATIO - Bullish sentiment (call/put imbalance)
+    3. CALL_CONCENTRATION - Heavy buying at specific strikes
+    4. HIGH_OPTIONS_VOLUME - Overall unusual activity
+
     Returns list of signals with scores
     """
     signals = []
-    
+
     if not summary:
         return signals
-    
+
     now = datetime.utcnow().isoformat()
-    
-    # 1. VOLUME SPIKE: High volume vs OI
-    vol_oi_ratio = summary.get('avg_volume_oi_ratio', 0)
-    if vol_oi_ratio > 1.5:  # Volume > 150% of OI
-        score = min(1.0, vol_oi_ratio / 5)  # Cap at 500%
+
+    # Get key metrics
+    call_volume = summary.get('call_volume', 0)
+    put_volume = summary.get('put_volume', 0)
+    total_volume = summary.get('total_volume', 0)
+
+    # 1. HIGH CALL VOLUME (absolute, not ratio-based)
+    # For small caps, 5000+ call contracts is significant
+    if call_volume >= 5000:
+        # Score: 5K = 0.5, 10K = 0.75, 20K+ = 1.0
+        score = min(1.0, 0.5 + (call_volume - 5000) / 30000)
         signals.append(OptionsFlowSignal(
             ticker=ticker,
-            signal_type='VOLUME_SPIKE',
+            signal_type='HIGH_CALL_VOLUME',
             score=score,
             details={
-                'volume_oi_ratio': round(vol_oi_ratio, 2),
-                'interpretation': 'Heavy new positioning, potential big move coming'
+                'call_volume': call_volume,
+                'put_volume': put_volume,
+                'interpretation': 'Significant call buying activity detected'
             },
             timestamp=now
         ))
-    
+
     # 2. LOW PUT/CALL RATIO: Bullish sentiment
     pc_ratio = summary.get('put_call_ratio', 1)
-    if pc_ratio < 0.5:  # Very low P/C ratio
-        score = min(1.0, (0.5 - pc_ratio) * 2)  # Lower = more bullish
+    if pc_ratio < 0.5 and total_volume > 1000:  # Require minimum volume for reliability
+        # Lower P/C = more bullish. Score: 0.5 P/C = 0.0, 0.0 P/C = 1.0
+        score = min(1.0, (0.5 - pc_ratio) * 2)
         signals.append(OptionsFlowSignal(
             ticker=ticker,
             signal_type='LOW_PC_RATIO',
             score=score,
             details={
-                'put_call_ratio': round(pc_ratio, 2),
-                'call_volume': summary.get('call_volume', 0),
-                'put_volume': summary.get('put_volume', 0),
-                'interpretation': 'Strong bullish sentiment, call buying dominates'
+                'put_call_ratio': round(pc_ratio, 3),
+                'call_volume': call_volume,
+                'put_volume': put_volume,
+                'interpretation': 'Strong bullish sentiment - calls dominate puts'
             },
             timestamp=now
         ))
-    
-    # 3. CALL CONCENTRATION: Max volume is calls
-    if summary.get('max_volume_type') == 'CALL':
-        total = summary.get('total_volume', 1)
-        call_vol = summary.get('call_volume', 0)
-        call_pct = call_vol / total if total > 0 else 0
-        
-        if call_pct > 0.7:  # 70%+ calls
+
+    # 3. CALL CONCENTRATION: Heavy buying at specific strikes
+    if summary.get('max_volume_type') == 'CALL' and total_volume > 0:
+        call_pct = call_volume / total_volume if total_volume > 0 else 0
+
+        # 70%+ call concentration is significant
+        if call_pct >= 0.70:
             signals.append(OptionsFlowSignal(
                 ticker=ticker,
                 signal_type='CALL_CONCENTRATION',
-                score=call_pct,
+                score=min(1.0, call_pct),  # 70% = 0.7, 100% = 1.0
                 details={
                     'call_percentage': round(call_pct * 100, 1),
                     'max_strike': summary.get('max_volume_strike', 0),
                     'max_expiry': summary.get('max_volume_expiry', ''),
-                    'interpretation': 'Heavy call buying at specific strike'
+                    'interpretation': 'Heavy call concentration at specific strike (potential target)'
                 },
                 timestamp=now
             ))
-    
+
     # 4. HIGH TOTAL VOLUME: Unusual overall activity
-    total_volume = summary.get('total_volume', 0)
-    if total_volume > 10000:  # Significant volume for small caps
-        score = min(1.0, total_volume / 50000)
+    # For small caps, 10K+ total options volume is notable
+    if total_volume >= 10000:
+        # Score: 10K = 0.5, 25K = 0.75, 50K+ = 1.0
+        score = min(1.0, 0.5 + (total_volume - 10000) / 80000)
         signals.append(OptionsFlowSignal(
             ticker=ticker,
             signal_type='HIGH_OPTIONS_VOLUME',
             score=score,
             details={
                 'total_volume': total_volume,
-                'interpretation': 'High options activity, smart money potentially positioning'
+                'call_volume': call_volume,
+                'put_volume': put_volume,
+                'interpretation': 'High options activity - smart money potentially positioning'
             },
             timestamp=now
         ))
-    
+
     return signals
 
 

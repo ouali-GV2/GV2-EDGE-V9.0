@@ -247,7 +247,7 @@ st.markdown("""
 # ============================
 
 DATA_DIR = Path("data")
-SIGNALS_DB = DATA_DIR / "signals.db"
+SIGNALS_DB = DATA_DIR / "signals_history.db"
 AUDIT_DIR = DATA_DIR / "audit_reports"
 BACKTEST_DIR = DATA_DIR / "backtest_reports"
 
@@ -480,46 +480,99 @@ def create_hit_rate_gauge(hit_rate):
 
 
 def create_events_heatmap(events_data):
-    """Create heatmap of events by type and hour"""
+    """Create heatmap of events by type and hour from real data"""
     if not events_data:
         return None
-    
-    # Sample data structure for demo
-    event_types = ['FDA', 'Earnings', 'M&A', 'Contract', 'Analyst']
-    hours = list(range(24))
-    
-    # Generate sample data (replace with real data)
-    import numpy as np
-    z = np.random.randint(0, 10, size=(len(event_types), len(hours)))
-    
-    fig = go.Figure(data=go.Heatmap(
-        z=z,
-        x=hours,
-        y=event_types,
-        colorscale=[
-            [0, '#1a1f2e'],
-            [0.5, '#3b82f6'],
-            [1, '#06b6d4']
-        ],
-        showscale=False
-    ))
-    
-    fig.update_layout(
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='#1a1f2e',
-        xaxis=dict(
-            title='Hour (UTC)',
-            tickfont=dict(color='#9ca3af'),
-            gridcolor='#374151'
-        ),
-        yaxis=dict(
-            tickfont=dict(color='#9ca3af')
-        ),
-        margin=dict(l=80, r=20, t=20, b=40),
-        height=200
-    )
-    
-    return fig
+
+    try:
+        # Convert events to DataFrame
+        if isinstance(events_data, list):
+            df = pd.DataFrame(events_data)
+        elif isinstance(events_data, dict):
+            # Flatten dict structure {ticker: [events]}
+            events_list = []
+            for ticker, events in events_data.items():
+                if isinstance(events, list):
+                    for e in events:
+                        if isinstance(e, dict):
+                            e['ticker'] = ticker
+                            events_list.append(e)
+                elif isinstance(events, dict):
+                    events['ticker'] = ticker
+                    events_list.append(events)
+            df = pd.DataFrame(events_list)
+        else:
+            return None
+
+        if df.empty or 'type' not in df.columns:
+            return None
+
+        # Parse dates and extract hour
+        if 'date' in df.columns:
+            df['hour'] = pd.to_datetime(df['date'], errors='coerce').dt.hour
+        elif 'timestamp' in df.columns:
+            df['hour'] = pd.to_datetime(df['timestamp'], errors='coerce').dt.hour
+        elif 'published_at' in df.columns:
+            df['hour'] = pd.to_datetime(df['published_at'], errors='coerce').dt.hour
+        else:
+            df['hour'] = 12  # Default to noon if no time data
+
+        # Drop rows with NaN hours
+        df = df.dropna(subset=['hour'])
+        df['hour'] = df['hour'].astype(int)
+
+        if df.empty:
+            return None
+
+        # Create pivot table: event type x hour
+        pivot = df.groupby(['type', 'hour']).size().unstack(fill_value=0)
+
+        # Ensure all 24 hours are present
+        all_hours = list(range(24))
+        for h in all_hours:
+            if h not in pivot.columns:
+                pivot[h] = 0
+        pivot = pivot[sorted(pivot.columns)]
+
+        fig = go.Figure(data=go.Heatmap(
+            z=pivot.values,
+            x=list(pivot.columns),
+            y=list(pivot.index),
+            colorscale=[
+                [0, '#1a1f2e'],
+                [0.5, '#3b82f6'],
+                [1, '#06b6d4']
+            ],
+            showscale=True,
+            colorbar=dict(
+                title='Count',
+                titlefont=dict(color='#9ca3af'),
+                tickfont=dict(color='#9ca3af')
+            )
+        ))
+
+        fig.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='#1a1f2e',
+            xaxis=dict(
+                title='Hour (UTC)',
+                tickfont=dict(color='#9ca3af'),
+                gridcolor='#374151',
+                dtick=2
+            ),
+            yaxis=dict(
+                title='Event Type',
+                tickfont=dict(color='#9ca3af')
+            ),
+            margin=dict(l=100, r=20, t=20, b=40),
+            height=250
+        )
+
+        return fig
+
+    except Exception as e:
+        # Log error but don't crash
+        return None
 
 
 # ============================
@@ -925,6 +978,15 @@ with tab3:
         heatmap_fig = create_events_heatmap(events_cache)
         if heatmap_fig:
             st.plotly_chart(heatmap_fig, use_container_width=True)
+        else:
+            st.markdown("""
+            <div class="metric-card" style="text-align: center; padding: 2rem;">
+                <div style="color: #6b7280; font-size: 1.1rem;">📊 No data available</div>
+                <div style="color: #4b5563; font-size: 0.85rem; margin-top: 0.5rem;">
+                    Events heatmap will populate after scanning
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
         
         st.markdown("#### Upcoming Catalysts")
         st.markdown("""

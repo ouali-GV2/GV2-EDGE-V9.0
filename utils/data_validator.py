@@ -84,8 +84,9 @@ def validate_signal(signal):
             logger.warning(f"Signal missing {r}")
             return False
 
-    if signal["signal"] not in ["BUY", "BUY_STRONG", "HOLD"]:
-        logger.warning("Unknown signal type")
+    valid_signals = ["BUY", "BUY_STRONG", "WATCH", "WATCH_EARLY", "HOLD"]
+    if signal["signal"] not in valid_signals:
+        logger.warning(f"Unknown signal type: {signal['signal']}. Valid types: {valid_signals}")
         return False
 
     if not (0 <= signal["confidence"] <= 1):
