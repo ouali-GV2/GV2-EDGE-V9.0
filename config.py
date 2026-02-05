@@ -314,3 +314,31 @@ PRE_SPIKE_LOOKBACK_PERIODS = 6        # Number of periods to analyze
 
 # Boost settings
 PRE_SPIKE_MAX_BOOST = 1.4             # Maximum boost multiplier for Monster Score
+
+# ============================
+# NLP ENRICHI (V6)
+# ============================
+
+ENABLE_NLP_ENRICHI = True             # Enable advanced NLP processing
+
+# Sentiment settings
+NLP_USE_GROK = True                   # Use Grok API for deep analysis (vs keyword-only)
+NLP_SENTIMENT_LOOKBACK_HOURS = 24     # Hours to look back for sentiment aggregation
+NLP_SENTIMENT_SPIKE_THRESHOLD = 0.3   # Sentiment change threshold for spike alert
+
+# Boost settings
+NLP_SENTIMENT_MAX_BOOST = 1.4         # Maximum sentiment boost multiplier
+NLP_SENTIMENT_MIN_BOOST = 0.7         # Minimum sentiment boost (bearish penalty)
+
+# Urgency decay (hours for urgency to lose impact)
+NLP_URGENCY_DECAY_BREAKING = 4        # Breaking news decays fast
+NLP_URGENCY_DECAY_HIGH = 12
+NLP_URGENCY_DECAY_MEDIUM = 24
+NLP_URGENCY_DECAY_LOW = 48
+
+# Category impact weights (override defaults)
+# Higher = more impact on final score
+NLP_CATEGORY_FDA_WEIGHT = 1.0
+NLP_CATEGORY_MA_WEIGHT = 0.95
+NLP_CATEGORY_EARNINGS_WEIGHT = 0.85
+NLP_CATEGORY_CONTRACT_WEIGHT = 0.75

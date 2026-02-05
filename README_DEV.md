@@ -42,6 +42,43 @@ Ce document explique :
 - Alert levels: NONE → LOW → MEDIUM → HIGH → CRITICAL
 - Boost multiplicateur pour Monster Score (jusqu'à 1.6x)
 
+**5. NLP Enrichi** (`src/nlp_enrichi.py`)
+- Analyse sentiment avancée: bullish/bearish avec intensité et confiance
+- Extraction d'entités: tickers, personnes, produits, chiffres clés
+- Classification news: 13 catégories + 5 niveaux d'urgence
+- Agrégation multi-sources: time-weighted sentiment across sources
+- Détection spike sentiment: alerte si changement > 30%
+- Database SQLite pour historique sentiment
+- Boost multiplicateur: 0.7x (bearish) à 1.4x (bullish)
+
+### Catégories de News (NLP Enrichi)
+
+```python
+# Impact décroissant
+FDA_REGULATORY     # 1.00 - FDA approvals, trials
+MERGER_ACQUISITION # 0.95 - M&A, buyouts
+EARNINGS           # 0.85 - Quarterly results
+CONTRACT_DEAL      # 0.75 - Contracts, partnerships
+GUIDANCE           # 0.72 - Forward guidance
+ANALYST_RATING     # 0.65 - Upgrades, downgrades
+PRODUCT_LAUNCH     # 0.60 - New products
+INSIDER_ACTIVITY   # 0.55 - Insider buying/selling
+MANAGEMENT         # 0.45 - CEO changes
+LEGAL              # 0.40 - Lawsuits
+SECTOR_NEWS        # 0.30 - Industry news
+MACRO              # 0.25 - Economic news
+```
+
+### Niveaux d'Urgence
+
+```python
+BREAKING  # Immediate action, just happened (decay: 4h)
+HIGH      # Same-day relevance (decay: 12h)
+MEDIUM    # Near-term relevance (decay: 24h)
+LOW       # Background info (decay: 48h)
+STALE     # Old news (decay: 168h)
+```
+
 ### Hiérarchie des Catalyst Types (V3)
 
 ```python
@@ -117,6 +154,14 @@ main.py
 │       ├── Quality assessment        # Source reliability + confirmation
 │       ├── Confluence scoring        # Multiple catalysts = higher score
 │       └── Performance tracking      # Learn from historical data
+│
+├── 🧠 NLP ENRICHI (NEW V6)
+│   └── src/nlp_enrichi.py            # Advanced sentiment & news processing
+│       ├── Enhanced sentiment        # Bullish/bearish with intensity
+│       ├── Entity extraction         # Tickers, people, products, numbers
+│       ├── News classification       # 13 categories + 5 urgency levels
+│       ├── Multi-source aggregation  # Time-weighted sentiment
+│       └── Sentiment spike detection # Alert on 30%+ change
 │
 ├── 🎯 ANTICIPATION ENGINE (V5)
 │   ├── src/anticipation_engine.py      # Orchestrateur principal
