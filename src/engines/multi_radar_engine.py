@@ -1162,6 +1162,9 @@ class MultiRadarEngine:
         # Callbacks pour signaux actionnables
         self._callbacks: List = []
 
+        # Streaming watchlist — tickers a surveiller en temps reel
+        self._streaming_watchlist: Dict[str, Dict[str, Any]] = {}
+
         logger.info("MultiRadarEngine initialized — 4 radars ready")
 
     def on_signal(self, callback):
@@ -1238,6 +1241,13 @@ class MultiRadarEngine:
                 f"SM={radar_map['smart_money'].score:.2f} S={radar_map['sentiment'].score:.2f} "
                 f"({total_ms:.0f}ms)"
             )
+
+        # Streaming feedback loop — alimenter IBKR streaming avec les
+        # tickers detectes par les radars non-flow (Catalyst, SmartMoney, Sentiment)
+        try:
+            self._feed_streaming_watchlist(signal)
+        except Exception as e:
+            logger.debug(f"Streaming feedback error for {ticker}: {e}")
 
         # Callbacks
         if signal.is_actionable():
@@ -1341,6 +1351,173 @@ class MultiRadarEngine:
                     top.append(latest)
         top.sort(key=lambda s: s.final_score, reverse=True)
         return top
+
+    # ================================================================
+    # STREAMING FEEDBACK LOOP
+    # ================================================================
+    #
+    # Boucle vertueuse:
+    #   Radars detectent → ticker ajoute au streaming IBKR
+    #   → TickerStateBuffer se remplit → FlowRadar detecte mieux
+    #   → Score monte → priorite HOT → scan plus frequent
+    #
+    # C'est le chaînon manquant: les 3 radars non-flow (Catalyst,
+    # SmartMoney, Sentiment) ALIMENTENT le streaming pour que
+    # FlowRadar puisse ensuite confirmer avec les donnees temps reel.
+
+    def _feed_streaming_watchlist(self, signal: ConfluenceSignal) -> None:
+        """
+        Alimente la watchlist streaming a partir des resultats des radars.
+
+        Logique:
+        - Si un radar non-flow detecte un candidat → subscribe au streaming
+        - Priorite streaming basee sur le signal_type et l'agreement
+        - Le streaming remplit le TickerStateBuffer
+        - Au prochain cycle, FlowRadar pourra confirmer ou infirmer
+
+        C'est la boucle feedback qui connecte les 4 radars au streaming.
+        """
+        ticker = signal.ticker
+
+        # Seuil minimum pour justifier un subscribe streaming
+        if signal.final_score < 0.15 or signal.signal_type == "NO_SIGNAL":
+            return
+
+        # Determiner la priorite streaming
+        if signal.signal_type in ("BUY_STRONG",) or signal.agreement in (AgreementLevel.UNANIMOUS,):
+            stream_priority = "HOT"
+        elif signal.signal_type in ("BUY",) or signal.agreement in (AgreementLevel.STRONG,):
+            stream_priority = "HOT"
+        elif signal.signal_type in ("WATCH",):
+            stream_priority = "WARM"
+        else:
+            stream_priority = "NORMAL"
+
+        # Identifier quels radars non-flow ont detecte ce ticker
+        source_radars = []
+        for name in ("catalyst", "smart_money", "sentiment"):
+            r = signal.radar_results.get(name)
+            if r and r.is_active:
+                source_radars.append(name)
+
+        # Si le FlowRadar est deja actif, le streaming est deja en place
+        flow = signal.radar_results.get("flow")
+        flow_already_active = flow and flow.is_active
+
+        # Mettre a jour la watchlist interne
+        self._streaming_watchlist[ticker] = {
+            "priority": stream_priority,
+            "score": signal.final_score,
+            "signal_type": signal.signal_type,
+            "source_radars": source_radars,
+            "flow_active": flow_already_active,
+            "needs_streaming": not flow_already_active and len(source_radars) > 0,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+        # Envoyer au streaming IBKR + HotTickerQueue
+        if not flow_already_active and source_radars:
+            self._push_to_ibkr_streaming(ticker, stream_priority)
+            self._push_to_hot_queue(ticker, stream_priority, source_radars)
+
+    def _push_to_ibkr_streaming(self, ticker: str, priority: str) -> None:
+        """
+        Subscribe un ticker au streaming IBKR pour surveillance temps reel.
+
+        Le streaming va:
+        1. Ouvrir un abonnement L1 persistant (pas de poll-and-cancel)
+        2. Recevoir les ticks en ~10ms
+        3. Alimenter automatiquement le TickerStateBuffer
+        4. FlowRadar pourra lire les derivees au prochain scan
+        """
+        try:
+            from src.ibkr_streaming import get_ibkr_streaming
+            streaming = get_ibkr_streaming()
+
+            if not streaming.is_subscribed(ticker):
+                count = streaming.subscribe([ticker], priority=priority)
+                if count > 0:
+                    logger.info(
+                        f"STREAMING SUBSCRIBE: {ticker} (priority={priority}) "
+                        f"— radar-driven feedback loop"
+                    )
+                else:
+                    logger.debug(f"Streaming subscribe failed for {ticker}")
+        except Exception as e:
+            logger.debug(f"IBKR streaming not available for {ticker}: {e}")
+
+    def _push_to_hot_queue(self, ticker: str, priority: str, source_radars: List[str]) -> None:
+        """
+        Ajoute un ticker a la HotTickerQueue pour scan prioritaire.
+
+        La HotTickerQueue controle la frequence de scan:
+        - HOT: scan toutes les 90s
+        - WARM: scan toutes les 5 min
+        - NORMAL: scan toutes les 10 min
+        """
+        try:
+            from src.schedulers.hot_ticker_queue import get_hot_queue
+
+            # Mapper la priorite string vers l'enum
+            from src.schedulers.hot_ticker_queue import TickerPriority, TriggerReason
+
+            prio_map = {
+                "HOT": TickerPriority.HOT,
+                "WARM": TickerPriority.WARM,
+                "NORMAL": TickerPriority.NORMAL,
+            }
+            queue_priority = prio_map.get(priority, TickerPriority.NORMAL)
+
+            # Determiner la raison du trigger
+            reason = TriggerReason.GLOBAL_CATALYST
+            if "smart_money" in source_radars:
+                reason = TriggerReason.PRE_SPIKE_RADAR
+            elif "sentiment" in source_radars:
+                reason = TriggerReason.SOCIAL_BUZZ
+
+            queue = get_hot_queue()
+            queue.push(
+                ticker=ticker,
+                priority=queue_priority,
+                reason=reason,
+                metadata={"source": "multi_radar", "radars": source_radars},
+            )
+            logger.debug(f"HOT_QUEUE: {ticker} → {priority} (from {source_radars})")
+        except Exception as e:
+            logger.debug(f"HotTickerQueue push failed for {ticker}: {e}")
+
+    def get_streaming_watchlist(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Retourne la watchlist de tickers a surveiller en streaming.
+
+        Utile pour:
+        - Savoir quels tickers sont surveilles et pourquoi
+        - Debug: voir quels radars ont declenche le streaming
+        - Dashboard: afficher les tickers sous surveillance active
+
+        Returns:
+            Dict {ticker: {priority, score, source_radars, needs_streaming, ...}}
+        """
+        return dict(self._streaming_watchlist)
+
+    def get_tickers_needing_streaming(self) -> List[Tuple[str, str]]:
+        """
+        Retourne les tickers qui ont besoin de streaming IBKR
+        mais dont le FlowRadar n'a pas encore de donnees.
+
+        Returns:
+            Liste de (ticker, priority) triee par score descendant.
+            Ce sont les tickers detectes par Catalyst/SmartMoney/Sentiment
+            qui n'ont pas encore de donnees temps reel.
+        """
+        needing = []
+        for ticker, info in self._streaming_watchlist.items():
+            if info.get("needs_streaming", False):
+                needing.append((ticker, info["priority"], info["score"]))
+
+        # Trier par score descendant
+        needing.sort(key=lambda x: x[2], reverse=True)
+        return [(t, p) for t, p, _ in needing]
 
 
 # ================================================================
