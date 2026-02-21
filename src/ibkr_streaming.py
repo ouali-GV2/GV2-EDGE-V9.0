@@ -43,7 +43,7 @@ Requirements:
 import time
 import threading
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Set, Callable, Tuple
+from typing import Any, Dict, List, Optional, Set, Callable, Tuple
 from dataclasses import dataclass, field
 from collections import defaultdict
 import logging
@@ -117,6 +117,29 @@ class StreamingEvent:
 
 
 @dataclass
+class TickByTickTrade:
+    """Individual trade from tick-by-tick data."""
+    ticker: str
+    timestamp: datetime
+    price: float
+    size: int
+    exchange: str = ""
+    is_block: bool = False        # True if size > 10x average
+
+
+@dataclass
+class BlockTradeEvent:
+    """Detected block trade (institutional activity)."""
+    ticker: str
+    timestamp: datetime
+    price: float
+    size: int
+    avg_trade_size: float
+    size_ratio: float             # size / avg_trade_size
+    exchange: str = ""
+
+
+@dataclass
 class SubscriptionInfo:
     """Track subscription state for a ticker."""
     ticker: str
@@ -177,6 +200,14 @@ class IBKRStreaming:
         self._quote_callbacks: List[Callable] = []
         self._event_callbacks: List[Callable] = []
         self._buffer_feed_enabled = True
+
+        # Tick-by-tick for hot tickers (LAUNCHING/BREAKOUT)
+        self._tbt_subscriptions: Dict[str, Any] = {}  # ticker -> contract
+        self._tbt_trades: Dict[str, List] = {}         # ticker -> recent trades
+        self._avg_trade_size: Dict[str, float] = {}    # ticker -> avg size
+        self._block_callbacks: List[Callable] = []
+        self._tbt_max = 20                              # Max concurrent TBT subs
+        BLOCK_TRADE_RATIO = 10.0                        # 10x avg = block trade
 
         # Stats
         self._total_ticks = 0
@@ -369,6 +400,147 @@ class IBKRStreaming:
     def enable_buffer_feed(self, enabled: bool = True):
         """Enable/disable automatic feeding of TickerStateBuffer."""
         self._buffer_feed_enabled = enabled
+
+    # ========================================================================
+    # Tick-by-Tick (A3) — Block Trade Detection for LAUNCHING/BREAKOUT
+    # ========================================================================
+
+    def subscribe_tick_by_tick(self, ticker: str) -> bool:
+        """
+        Subscribe to tick-by-tick data for a hot ticker.
+
+        Use for LAUNCHING/BREAKOUT tickers to detect block trades.
+        More granular than L1 streaming — shows every individual trade.
+        """
+        ticker = ticker.upper()
+
+        if ticker in self._tbt_subscriptions:
+            return True
+
+        if len(self._tbt_subscriptions) >= self._tbt_max:
+            logger.debug(f"TBT max reached ({self._tbt_max}), cannot subscribe {ticker}")
+            return False
+
+        if not self._connected or not self._ib:
+            return False
+
+        try:
+            from ib_insync import Stock
+
+            contract = Stock(ticker, 'SMART', 'USD')
+            qualified = self._ib.qualifyContracts(contract)
+            if not qualified:
+                return False
+
+            contract = qualified[0]
+
+            # Request tick-by-tick AllLast data
+            self._ib.reqTickByTickData(contract, 'AllLast', 0, False)
+            self._tbt_subscriptions[ticker] = contract
+            self._tbt_trades[ticker] = []
+
+            logger.info(f"TICK-BY-TICK subscribed: {ticker}")
+            return True
+
+        except Exception as e:
+            logger.debug(f"TBT subscribe failed {ticker}: {e}")
+            return False
+
+    def unsubscribe_tick_by_tick(self, ticker: str) -> bool:
+        """Unsubscribe from tick-by-tick data."""
+        ticker = ticker.upper()
+        contract = self._tbt_subscriptions.pop(ticker, None)
+        if contract and self._ib:
+            try:
+                self._ib.cancelTickByTickData(contract, 'AllLast')
+                return True
+            except Exception as e:
+                logger.debug(f"TBT cancel error {ticker}: {e}")
+        return False
+
+    def on_block_trade(self, callback: Callable) -> None:
+        """Register callback for block trade events."""
+        self._block_callbacks.append(callback)
+
+    def set_avg_trade_size(self, ticker: str, avg_size: float) -> None:
+        """Set average trade size baseline for block detection."""
+        self._avg_trade_size[ticker.upper()] = avg_size
+
+    def _process_tick_by_tick(self, trade) -> None:
+        """
+        Process individual tick-by-tick trade.
+        Called by ib_insync for each trade on TBT-subscribed tickers.
+        """
+        try:
+            if not hasattr(trade, 'contract') or not trade.contract:
+                return
+
+            ticker = trade.contract.symbol
+            if not ticker:
+                return
+
+            price = float(trade.price) if hasattr(trade, 'price') else 0
+            size = int(trade.size) if hasattr(trade, 'size') else 0
+            exchange = str(getattr(trade, 'exchange', ''))
+
+            if price <= 0 or size <= 0:
+                return
+
+            # Store trade
+            tbt_trade = {
+                "timestamp": datetime.now(),
+                "price": price,
+                "size": size,
+                "exchange": exchange,
+            }
+
+            if ticker in self._tbt_trades:
+                self._tbt_trades[ticker].append(tbt_trade)
+                # Keep last 500 trades
+                if len(self._tbt_trades[ticker]) > 500:
+                    self._tbt_trades[ticker] = self._tbt_trades[ticker][-500:]
+
+            # Block trade detection
+            avg = self._avg_trade_size.get(ticker)
+            if not avg:
+                # Compute from recent trades
+                trades = self._tbt_trades.get(ticker, [])
+                if len(trades) >= 20:
+                    avg = sum(t["size"] for t in trades[-100:]) / len(trades[-100:])
+                    self._avg_trade_size[ticker] = avg
+
+            if avg and avg > 0 and size >= avg * 10.0:
+                block = {
+                    "ticker": ticker,
+                    "timestamp": datetime.now(),
+                    "price": price,
+                    "size": size,
+                    "avg_trade_size": avg,
+                    "size_ratio": round(size / avg, 1),
+                    "exchange": exchange,
+                }
+
+                logger.info(
+                    f"BLOCK TRADE: {ticker} {size:,} shares @ ${price:.2f} "
+                    f"({block['size_ratio']}x avg) on {exchange}"
+                )
+
+                for cb in self._block_callbacks:
+                    try:
+                        cb(block)
+                    except Exception as e:
+                        logger.debug(f"Block callback error: {e}")
+
+        except Exception as e:
+            logger.debug(f"TBT processing error: {e}")
+
+    def get_tbt_stats(self) -> Dict:
+        """Get tick-by-tick subscription stats."""
+        return {
+            "tbt_subscriptions": len(self._tbt_subscriptions),
+            "tbt_tickers": list(self._tbt_subscriptions.keys()),
+            "total_trades_tracked": sum(len(t) for t in self._tbt_trades.values()),
+        }
 
     def get_stats(self) -> Dict:
         """Get streaming engine statistics."""
