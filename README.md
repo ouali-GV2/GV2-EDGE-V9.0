@@ -1,6 +1,6 @@
-# GV2-EDGE V8.0 - Radar Anticipatif Small-Caps Intraday
+# GV2-EDGE V9.0 - Radar Anticipatif Small-Caps Intraday
 
-**Version 8.0 - Anticipatory Detection Architecture**
+**Version 9.0 - Multi-Radar Anticipatory Detection Architecture**
 
 ---
 
@@ -16,13 +16,14 @@ Le systeme ne trade pas sur des indicateurs retardes. Il detecte les **phases d'
 
 GV2-EDGE n'est pas un screener classique. Les differences fondamentales :
 
-| Screener Classique | GV2-EDGE V8 |
+| Screener Classique | GV2-EDGE V9 |
 |---|---|
 | Detecte les actions qui **bougent deja** (+5%, +10%) | Detecte les actions qui **vont bouger** (accumulation) |
 | Seuils fixes (volume > 5x, prix > 20%) | Z-scores adaptatifs vs baseline 20 jours par ticker |
 | Signal binaire (passe/ne passe pas) | 4 phases progressives (ACCUMULATING → LAUNCHING) |
 | Pas de gestion de risque integree | Pipeline complet : detection → sizing → execution → risk |
 | Aucune memoire | Market Memory : apprend des signaux manques |
+| Angle unique (prix ou volume) | V9 Multi-Radar : 4 radars paralleles (Flow, Catalyst, Smart Money, Sentiment) avec confluence matrix |
 
 ### Univers Cible
 
@@ -49,6 +50,18 @@ Le principe fondamental de GV2-EDGE : **la detection ne s'arrete jamais, seule l
 │                                                                │
 │ Produit : AccelerationScore + RadarBlip                        │
 │ Latence : <500ms pour 200 tickers (lecture buffer, pas d'API)  │
+└───────────────────────────┬────────────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────────────┐
+│ COUCHE 0.5 (V9) : MULTI-RADAR ENGINE                          │
+│                                                                │
+│ 4 radars paralleles (asyncio.gather):                          │
+│   Flow Radar ──► Catalyst Radar ──► Smart Money ──► Sentiment  │
+│                                                                │
+│ Confluence Matrix (2D + modifiers) → ConfluenceSignal          │
+│ Session-adaptatif (6 sous-sessions)                            │
+│ Latence : <200ms (cache reads)                                 │
 └───────────────────────────┬────────────────────────────────────┘
                             │
                             ▼
@@ -99,6 +112,8 @@ Le principe fondamental de GV2-EDGE : **la detection ne s'arrete jamais, seule l
 1. Donnees brutes (prix, volume, bid/ask) → TickerStateBuffer (push toutes les ~60s)
 2. AccelerationEngine lit le buffer → calcule derivees, z-scores → detecte ACCUMULATING
 3. SmallCapRadar scan → produit RadarBlip (priorite, phase, temps estime)
+3.5. Multi-Radar V9 : 4 radars paralleles (Flow, Catalyst, Smart Money, Sentiment)
+     → Confluence Matrix (2D + modifiers) → ConfluenceSignal (agreement + lead_radar)
 4. MonsterScore V4 consolide : event(25%) + volume(17%) + pattern(17%)
    + pm_transition(13%) + acceleration(7%) + momentum(4%) + squeeze(4%)
    + options_flow(10%) + social_buzz(3%) + boosts conditionnels
@@ -229,7 +244,7 @@ Le principe fondamental de GV2-EDGE : **la detection ne s'arrete jamais, seule l
 
 **Role** : Analyse des flux d'options pour detecter l'activite smart money. Poids de 10% dans MonsterScore.
 
-**Etat actuel** : Implementation simplifiee. Retourne un score neutre (0.5) sans abonnement IBKR OPRA. Avec abonnement, detecte :
+**Etat actuel** : Actif avec abonnement IBKR OPRA. Detecte via le Smart Money Radar V9 :
 - Volume inhabituel de calls vs baseline
 - Concentration d'options sur strikes specifiques
 - Ratio put/call anormal
@@ -268,6 +283,37 @@ Le principe fondamental de GV2-EDGE : **la detection ne s'arrete jamais, seule l
 **Role** : Systeme d'apprentissage base sur les signaux manques (MRP) et les patterns historiques (EP). Informatif uniquement, ne bloque pas l'execution.
 
 **Activation** : Necessite 50+ misses, 30+ trades, 10+ patterns, 20+ profils (1-2 semaines de warm-up).
+
+### 3.11 Multi-Radar Engine (V9)
+
+**Fichier** : `src/engines/multi_radar_engine.py`
+
+**Role** : Architecture de detection multi-angle avec 4 radars independants operant en parallele, chacun adapte a la session en cours.
+
+**4 Radars :**
+| Radar | Sources | Detection |
+|-------|---------|-----------|
+| **FLOW** | AccelerationEngine, TickerStateBuffer, SmallCapRadar | Accumulation volume, derivees, breakout readiness |
+| **CATALYST** | EventHub, CatalystScorerV3, AnticipationEngine, FDA | Catalysts, news, SEC filings |
+| **SMART MONEY** | Options Flow IBKR (OPRA), InsiderBoost (SEC Form 4) | Options inhabituelles, achats insiders |
+| **SENTIMENT** | Social Buzz (Reddit+StockTwits), NLP Enrichi (Grok) | Buzz social, sentiment, repeat runners |
+
+**Confluence Matrix** : Matrice 2D (Flow x Catalyst) + modifiers (Smart Money, Sentiment) produisant un ConfluenceSignal avec signal_type, agreement level, et lead_radar.
+
+**Adaptation par session** : 6 sous-sessions (AFTER_HOURS, PRE_MARKET, RTH_OPEN, RTH_MIDDAY, RTH_CLOSE, CLOSED) avec poids dynamiques pour chaque radar.
+
+### 3.12 IBKR Streaming (V9)
+
+**Fichier** : `src/ibkr_streaming.py`
+
+**Role** : Streaming temps reel event-driven remplacant le pattern poll-and-cancel. Latence ~10ms vs 2000ms auparavant.
+
+**Fonctionnalites** :
+- Subscriptions persistantes (max 200 concurrentes)
+- Event callbacks: on_quote(), on_event()
+- Auto-detection: VOLUME_SPIKE, PRICE_SURGE, SPREAD_TIGHTENING, NEW_HIGH
+- Feed automatique du TickerStateBuffer
+- Integration HotTickerQueue (auto-promotion sur events)
 
 ---
 
@@ -620,13 +666,22 @@ L'etat ACCUMULATING est le signal le plus precoce disponible avec les donnees ac
 - [x] MonsterScore V4 (composant acceleration 7%, poids ajustes)
 - [x] SignalProducer V8 (integration acceleration, badges, boost)
 
-### Phase 3 (A venir) - Robustesse
+### Phase 3 (Partiel) - Robustesse
 
-- [ ] Connecter API Pool Manager aux ingestors (throughput x3)
+- [x] Connecter API Pool Manager aux ingestors (throughput x3)
 - [ ] Seuils z-score adaptatifs par classe de market cap (P9)
 - [ ] Pattern analyzer connecte au TickerStateBuffer
-- [ ] Pipeline parallele (asyncio.gather sur modules independants)
+- [x] Pipeline parallele (asyncio.gather via Multi-Radar V9)
 - [ ] Cache TTL adaptatif par priorite ticker (CRITICAL=5s, HOT=10s)
+
+### Phase 3.5 (V9 - Complete) - Multi-Radar & Streaming
+
+- [x] Multi-Radar Engine (4 radars paralleles + confluence matrix)
+- [x] IBKR Streaming Engine (event-driven, ~10ms latence)
+- [x] Finnhub WebSocket Screener (streaming bulk)
+- [x] Source externe top gainers (IBKR + Yahoo)
+- [x] Session Adapter (6 sous-sessions)
+- [x] Confluence Matrix (2D + modifiers)
 
 ### Phase 4 (A venir) - Intelligence
 

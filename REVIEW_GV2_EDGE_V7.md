@@ -501,3 +501,39 @@ Le système N'EST PAS adapté pour:
 - Univers large (>500 tickers simultanés)
 - Penny stocks en breakout (sur-blocage systématique)
 - Arbitrage sentiment temps réel (social analysis placeholder)
+
+---
+
+## 10. STATUT DE CORRECTION (2026-02-21)
+
+> **Note** : Cette revue a ete realisee sur V7.0. Les problemes identifies ont ete corriges dans V8/V9.
+
+### Problemes critiques — CORRIGES
+
+| # | Probleme V7 | Correction | Version |
+|---|------------|------------|---------|
+| 1 | Gap calculation casse (pm_scanner.py) | prev_close utilise, gap zones implementees | V8 |
+| 2 | Analyse sociale ~80% placeholder | Social Velocity Engine + NLP ameliore | V9 |
+| 3 | Risk Guard sur-bloque les top gainers | MIN-based + momentum override + planchers | V8 |
+| 4 | Confusion dilution potentielle/active | 4 tiers : ACTIVE/SHELF_RECENT/SHELF_DORMANT/CAPACITY | V8 |
+| 5 | Systeme fondamentalement REACTIF | AccelerationEngine + SmallCapRadar + Multi-Radar V9 | V8/V9 |
+
+### Problemes haute severite — CORRIGES
+
+| # | Probleme V7 | Correction | Version |
+|---|------------|------------|---------|
+| 6 | Scalabilite limitee 50-200 tickers | IBKR Streaming (200 subs) + Finnhub WS (illimite) | V9 |
+| 7 | Pattern analyzer scaffolding | Patterns intraday avances (VWAP, ORB, HoD) | V9 |
+| 8 | Market Memory warm-up 1-2 semaines | Market Memory V2 segmente par catalyst type | V9 |
+| 9 | Seuils absolus fixes | Z-scores adaptatifs + normalisation par baseline 20j | V8 |
+| 10 | Single provider dependency | Fallback IBKR → Finnhub WS → Finnhub REST → Cache | V8/V9 |
+
+### Score apres corrections V9
+
+| Module | V7 | V9 (estime) |
+|--------|-----|-------------|
+| Architecture | 7/10 | 9/10 |
+| Fonctionnalite | 4/10 | 8/10 |
+| Production-Ready | 4/10 | 7/10 |
+
+Voir `PLAN_TRANSFORMATION_V8.md`, `PLAN_CORRECTION_COVERAGE.md`, et `PLAN_AMELIORATION_V9.md` pour les details complets.

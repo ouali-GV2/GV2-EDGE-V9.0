@@ -4,6 +4,8 @@
 > **Latence cible**: < 30-45 secondes sur tickers HOT
 > **Date**: 2026-02-17
 > **Base**: Analyse de 78 fichiers source (REVIEW_GV2_EDGE_V7.md)
+> **Statut final** : PLAN V8 COMPLETE. Supersede par V9 (Multi-Radar + Streaming).
+> **Voir aussi** : PLAN_AMELIORATION_V9.md, PLAN_CORRECTION_COVERAGE.md
 
 ---
 
@@ -770,3 +772,25 @@ Les sprints 2-3 construisent les fondations du radar anticipatif (buffer rolling
 Les sprints 4-5 ajoutent l'intelligence avancée (anomalies comportementales, promotion dynamique).
 
 **Résultat final**: Un système capable de détecter un buildup de volume + compression technique + buzz social AVANT le mouvement de prix, avec une latence de 15-45 secondes sur les tickers prioritaires.
+
+---
+
+## STATUT FINAL (2026-02-21)
+
+**Le plan V8 a ete integralement implemente:**
+
+- PHASE 1 (Radar Anticipatif) : ✅ FAIT — AccelerationEngine + TickerStateBuffer + SmallCapRadar
+- PHASE 2 (Hierarchisation) : ✅ FAIT — Hot Ticker Queue TTL 4h + auto-renewal
+- PHASE 3 (Scoring) : ✅ FAIT — Monster Score V4 + z-scores adaptatifs
+- PHASE 4 (Risk Guard) : ✅ FAIT — MIN-based + momentum override + planchers
+- PHASE 5 (Gap/Pre-Market) : ✅ FAIT — prev_close corrige + gap zones
+- PHASE 6 (Async/Performance) : ✅ FAIT — asyncio.gather + pool API
+- PHASE 7 (23 reparations) : ✅ FAIT — Toutes les reparations R1-R23
+
+Le systeme a ensuite ete etendu avec V9 :
+- Multi-Radar Engine (4 radars paralleles + confluence matrix)
+- IBKR Streaming (event-driven, ~10ms latence)
+- Finnhub WebSocket Screener
+- Session Adapter (6 sous-sessions)
+
+Voir `PLAN_AMELIORATION_V9.md` pour les details V9.

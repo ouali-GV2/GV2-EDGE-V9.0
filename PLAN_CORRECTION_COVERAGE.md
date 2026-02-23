@@ -4,6 +4,8 @@
 > **Date** : 2026-02-17
 > **Branche** : `claude/review-hetzner-compatibility-d3HOb`
 > **Base** : Audit complet du pipeline (signal_producer, feature_engine, smallcap_radar, acceleration_engine, anticipation_engine, scan_scheduler, hot_ticker_queue)
+> **Statut final** : TOUTES LES 9 CORRECTIONS IMPLEMENTEES ET VALIDEES (2026-02-21)
+> **Supersede par** : PLAN_AMELIORATION_V9.md (21 ameliorations supplementaires)
 
 ---
 
@@ -591,3 +593,23 @@ Phase 4 — Source externe (2-3 heures)
 | `src/feature_engine.py` | C9.1, C9.2 — minimum bars |
 | `src/schedulers/scan_scheduler.py` | C1.4, C8.2 — WebSocket + external |
 | `main.py` | C1.6 — démarrage WebSocket |
+
+---
+
+## STATUT FINAL
+
+**Toutes les 9 corrections (C1-C9) ont ete implementees et integrees dans le pipeline V9.**
+
+| Correction | Statut | Date |
+|-----------|--------|------|
+| C1 - WebSocket Screener | ✅ FAIT | 2026-02-18 |
+| C2 - SmallCap Radar filtres | ✅ FAIT | 2026-02-17 |
+| C3 - Score plancher adaptatif | ✅ FAIT | 2026-02-17 |
+| C4 - Warm-up accelere | ✅ FAIT | 2026-02-17 |
+| C5 - Alert cooldown adaptatif | ✅ FAIT | 2026-02-17 |
+| C6 - Hot Ticker TTL 4h | ✅ FAIT | 2026-02-17 |
+| C7 - Batch limits anticipation | ✅ FAIT | 2026-02-17 |
+| C8 - Source externe top gainers | ✅ FAIT | 2026-02-18 |
+| C9 - Feature Engine 5 bars | ✅ FAIT | 2026-02-17 |
+
+Le systeme a ensuite ete etendu avec le PLAN_AMELIORATION_V9.md (21 ameliorations, 5 sprints).

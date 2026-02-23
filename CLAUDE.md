@@ -1,7 +1,7 @@
 # GV2-EDGE — System Reference & Development Guide
 
 > **Version** : V9.0 (Architecture V7.0 + Acceleration V8 + Multi-Radar V9)
-> **Derniere mise a jour** : 2026-02-18
+> **Derniere mise a jour** : 2026-02-21
 > **Deploiement** : Hetzner CX43 (8 vCPU, 16 Go RAM, 160 Go SSD, headless Linux) + IBKR Gateway
 > **Langage** : Python 3.11+ (asyncio + threading)
 

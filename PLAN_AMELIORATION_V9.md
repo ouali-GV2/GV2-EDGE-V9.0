@@ -88,34 +88,34 @@ Objectif V9: 95%+
 ```
 AXE 1: TEMPS REEL (Sprint 1)
 ├── A1: IBKR Streaming Engine              ✅ FAIT (ibkr_streaming.py)
-├── A2: Integration Streaming → Pipeline
-└── A3: Tick-by-tick pour hot tickers
+├── A2: Integration Streaming → Pipeline   ✅ FAIT
+└── A3: Tick-by-tick pour hot tickers      ✅ FAIT
 
 AXE 2: INTELLIGENCE CATALYSTS (Sprint 2)
-├── A4: Earnings Calendar Engine
-├── A5: FDA Calendar Complet (OpenFDA + ClinicalTrials)
-├── A6: Conference Calendar (JPM, ASH, ASCO, Bio-Europe...)
-├── A7: IPO/SPO Tracker
-└── A8: SEC Insider Clustering
+├── A4: Earnings Calendar Engine                       ✅ FAIT
+├── A5: FDA Calendar Complet (OpenFDA + ClinicalTrials) ✅ FAIT
+├── A6: Conference Calendar (JPM, ASH, ASCO, Bio-Europe...) ✅ FAIT
+├── A7: IPO/SPO Tracker                                ✅ FAIT
+└── A8: SEC Insider Clustering                         ✅ FAIT
 
 AXE 3: DETECTION AVANCEE (Sprint 3)
-├── A9: Float Turnover & Short Squeeze Score
-├── A10: Patterns Intraday Avances (VWAP, ORB, HoD)
-├── A11: Support/Resistance Dynamiques
-├── A12: Social Velocity Engine (acceleration mentions)
-└── A13: Cross-Ticker Correlation (sector momentum)
+├── A9: Float Turnover & Short Squeeze Score           ✅ FAIT
+├── A10: Patterns Intraday Avances (VWAP, ORB, HoD)   ✅ FAIT
+├── A11: Support/Resistance Dynamiques                 ✅ FAIT
+├── A12: Social Velocity Engine (acceleration mentions) ✅ FAIT
+└── A13: Cross-Ticker Correlation (sector momentum)    ✅ FAIT
 
 AXE 4: APPRENTISSAGE (Sprint 4)
-├── A14: Market Memory V2 (segmente par catalyst type)
-├── A15: Backtest Engine V8 (validation acceleration)
-├── A16: Auto-Tuning Weights (Monster Score adaptatif)
-└── A17: Telegram Alerts Enrichis (graphiques + contexte)
+├── A14: Market Memory V2 (segmente par catalyst type) ✅ FAIT
+├── A15: Backtest Engine V8 (validation acceleration)  ✅ FAIT
+├── A16: Auto-Tuning Weights (Monster Score adaptatif) ✅ FAIT
+└── A17: Telegram Alerts Enrichis (graphiques + contexte) ✅ FAIT
 
 AXE 5: NETTOYAGE (Sprint 5)
-├── A18: Supprimer modules morts
-├── A19: Migrer modules deprecated
-├── A20: Fusionner doublons
-└── A21: Tests unitaires complets
+├── A18: Supprimer modules morts                       ✅ FAIT
+├── A19: Migrer modules deprecated                     ✅ FAIT
+├── A20: Fusionner doublons                            ✅ FAIT
+└── A21: Tests unitaires complets                      ✅ FAIT
 ```
 
 ---
@@ -144,9 +144,10 @@ Fonctionnalites:
 
 ---
 
-### A2: Integration Streaming dans le Pipeline Principal
+### A2: Integration Streaming dans le Pipeline Principal ✅ FAIT
 
 **Fichier**: `main.py` (modifier)
+**Statut**: IMPLEMENTE
 **Effort**: 1 jour
 **Impact**: CRITIQUE
 
@@ -186,9 +187,10 @@ IBKR Streaming (10ms) ──→ TickerStateBuffer ──→ AccelerationEngine V
 
 ---
 
-### A3: Tick-by-Tick pour Hot Tickers
+### A3: Tick-by-Tick pour Hot Tickers ✅ FAIT
 
 **Fichier**: `src/ibkr_streaming.py` (etendre)
+**Statut**: IMPLEMENTE
 **Effort**: 0.5 jour
 **Impact**: HAUT
 
@@ -206,9 +208,10 @@ Avantage: Detecter les block trades institutionnels (taille > 10x moyenne) qui p
 
 ## 4. SPRINT 2 — INTELLIGENCE CATALYSTS (Priorite HAUTE)
 
-### A4: Earnings Calendar Engine
+### A4: Earnings Calendar Engine ✅ FAIT
 
 **Fichier**: `src/earnings_calendar.py` (nouveau)
+**Statut**: IMPLEMENTE
 **Effort**: 2 jours
 **Impact**: CRITIQUE (15-20% des top gainers sont earnings-driven)
 
@@ -262,9 +265,10 @@ class EarningsEvent:
 
 ---
 
-### A5: FDA Calendar Complet
+### A5: FDA Calendar Complet ✅ FAIT
 
 **Fichier**: `src/fda_calendar.py` (refactorer completement)
+**Statut**: IMPLEMENTE
 **Effort**: 2 jours
 **Impact**: HAUT (8-12% des top gainers sont FDA-driven)
 
@@ -325,9 +329,10 @@ class FDAEvent:
 
 ---
 
-### A6: Conference Calendar Biotech/Finance
+### A6: Conference Calendar Biotech/Finance ✅ FAIT
 
 **Fichier**: `src/conference_calendar.py` (nouveau)
+**Statut**: IMPLEMENTE
 **Effort**: 1.5 jours
 **Impact**: HAUT (5-8% des top gainers sont conference-driven)
 
@@ -372,9 +377,10 @@ class Conference:
 
 ---
 
-### A7: IPO/SPO Tracker
+### A7: IPO/SPO Tracker ✅ FAIT
 
 **Fichier**: `src/ipo_tracker.py` (nouveau)
+**Statut**: IMPLEMENTE
 **Effort**: 1 jour
 **Impact**: MOYEN (3-5% des top gainers sont IPO day-1 ou follow-on)
 
@@ -400,9 +406,10 @@ class IPOTracker:
 
 ---
 
-### A8: SEC Insider Clustering
+### A8: SEC Insider Clustering ✅ FAIT
 
 **Fichier**: `src/boosters/insider_boost.py` (etendre)
+**Statut**: IMPLEMENTE
 **Effort**: 0.5 jour
 **Impact**: MOYEN
 
@@ -420,9 +427,10 @@ def detect_insider_cluster(ticker, days=7) -> Optional[InsiderCluster]:
 
 ## 5. SPRINT 3 — DETECTION AVANCEE (Priorite HAUTE)
 
-### A9: Float Turnover & Short Squeeze Score
+### A9: Float Turnover & Short Squeeze Score ✅ FAIT
 
 **Fichier**: `src/float_analysis.py` (nouveau)
+**Statut**: IMPLEMENTE
 **Effort**: 2 jours
 **Impact**: CRITIQUE (les plus gros gainers sont souvent des squeezes)
 
@@ -464,9 +472,10 @@ class FloatAnalyzer:
 
 ---
 
-### A10: Patterns Intraday Avances
+### A10: Patterns Intraday Avances ✅ FAIT
 
 **Fichier**: `src/pattern_analyzer.py` (refactorer)
+**Statut**: IMPLEMENTE
 **Effort**: 2 jours
 **Impact**: HAUT
 
@@ -506,9 +515,10 @@ class IntradayPattern:
 
 ---
 
-### A11: Support/Resistance Dynamiques
+### A11: Support/Resistance Dynamiques ✅ FAIT
 
 **Fichier**: `src/levels_engine.py` (nouveau)
+**Statut**: IMPLEMENTE
 **Effort**: 1.5 jours
 **Impact**: HAUT
 
@@ -546,9 +556,10 @@ class TechnicalLevels:
 
 ---
 
-### A12: Social Velocity Engine
+### A12: Social Velocity Engine ✅ FAIT
 
 **Fichier**: `src/social_velocity.py` (nouveau, remplace social_buzz.py + social_buzz_engine.py)
+**Statut**: IMPLEMENTE
 **Effort**: 1.5 jours
 **Impact**: MOYEN-HAUT
 
@@ -576,9 +587,10 @@ class SocialVelocity:
 
 ---
 
-### A13: Cross-Ticker Correlation (Sector Momentum)
+### A13: Cross-Ticker Correlation (Sector Momentum) ✅ FAIT
 
 **Fichier**: `src/sector_momentum.py` (nouveau)
+**Statut**: IMPLEMENTE
 **Effort**: 1 jour
 **Impact**: MOYEN
 
@@ -605,9 +617,10 @@ class SectorSignal:
 
 ## 6. SPRINT 4 — APPRENTISSAGE ET OPTIMISATION (Priorite MOYENNE)
 
-### A14: Market Memory V2
+### A14: Market Memory V2 ✅ FAIT
 
 **Fichier**: `src/market_memory/context_scorer.py` (refactorer)
+**Statut**: IMPLEMENTE
 **Effort**: 2 jours
 **Impact**: HAUT
 
@@ -627,9 +640,10 @@ Un ticker peut avoir un excellent historique sur les earnings mais mauvais sur F
 
 ---
 
-### A15: Backtest Engine V8
+### A15: Backtest Engine V8 ✅ FAIT
 
 **Fichier**: `backtests/backtest_engine_v8.py` (nouveau)
+**Statut**: IMPLEMENTE
 **Effort**: 3 jours
 **Impact**: CRITIQUE pour validation
 
@@ -661,9 +675,10 @@ class BacktestResult:
 
 ---
 
-### A16: Auto-Tuning Weights
+### A16: Auto-Tuning Weights ✅ FAIT
 
 **Fichier**: `src/scoring/weight_optimizer.py` (nouveau, remplace score_optimizer.py mort)
+**Statut**: IMPLEMENTE
 **Effort**: 2 jours
 **Impact**: MOYEN-HAUT
 
