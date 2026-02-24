@@ -35,6 +35,7 @@ from config import (
     ENABLE_IBKR_NEWS_TRIGGER,
     ENABLE_RISK_GUARD,
     ENABLE_MARKET_MEMORY,
+    ENABLE_MULTI_RADAR,
 )
 
 logger = get_logger("MAIN")
@@ -87,6 +88,9 @@ from src.market_memory import (
     get_missed_tracker,
     MissReason,
 )
+
+# Multi-Radar Engine V9 (4 radars paralleles + confluence matrix)
+from src.engines.multi_radar_engine import get_multi_radar_engine
 
 # Pre-Halt Engine
 from src.pre_halt_engine import (
@@ -329,6 +333,39 @@ async def process_ticker_v7(ticker: str, state: V7State) -> Optional[UnifiedSign
         if not signal.is_actionable():
             logger.debug(f"{ticker}: {signal.signal_type.value} (score: {monster_score:.2f})")
             return signal
+
+        # === STEP 3b: MULTI-RADAR V9 (confluence enrichment — upgrade si consensus plus fort) ===
+        if ENABLE_MULTI_RADAR:
+            try:
+                radar_engine = get_multi_radar_engine()
+                radar_signal = await radar_engine.scan_ticker(
+                    ticker, detection_input.market_session
+                )
+                signal.multi_radar_result = radar_signal.to_dict()
+
+                # Upgrade signal_type si le consensus multi-radar est plus fort
+                _radar_priority = {
+                    "BUY_STRONG": 100, "BUY": 80,
+                    "WATCH": 60, "EARLY_SIGNAL": 40, "NO_SIGNAL": 0,
+                }
+                _radar_to_enum = {
+                    "BUY_STRONG": SignalType.BUY_STRONG,
+                    "BUY": SignalType.BUY,
+                    "WATCH": SignalType.WATCH,
+                    "EARLY_SIGNAL": SignalType.EARLY_SIGNAL,
+                }
+                radar_prio = _radar_priority.get(radar_signal.signal_type, 0)
+                current_prio = signal.signal_type.get_priority()
+                if radar_prio > current_prio and radar_signal.signal_type in _radar_to_enum:
+                    logger.info(
+                        f"{ticker}: Multi-Radar upgrade "
+                        f"{signal.signal_type.value} → {radar_signal.signal_type} "
+                        f"({radar_signal.agreement.value}, "
+                        f"score={radar_signal.final_score:.2f})"
+                    )
+                    signal.signal_type = _radar_to_enum[radar_signal.signal_type]
+            except Exception as e:
+                logger.debug(f"Multi-Radar error {ticker}: {e}")
 
         # === STEP 4: PRE-HALT ENGINE (sets pre_halt_state) ===
         if state.pre_halt and ENABLE_PRE_HALT_ENGINE:

@@ -39,7 +39,7 @@ from config import FINNHUB_API_KEY
 # Import Phase 1 modules
 from src.processors.keyword_filter import get_keyword_filter, FilterPriority
 from src.processors.ticker_extractor import get_ticker_extractor
-from src.ingestors.sec_filings_ingestor import SECFilingsIngestor
+from src.ingestors.sec_filings_ingestor import SECIngestor
 
 logger = get_logger("GLOBAL_NEWS_INGESTOR")
 
@@ -109,7 +109,7 @@ class GlobalNewsIngestor:
         self.universe = universe or set()
         self.keyword_filter = get_keyword_filter()
         self.ticker_extractor = get_ticker_extractor(universe)
-        self.sec_ingestor = SECFilingsIngestor(universe)
+        self.sec_ingestor = SECIngestor(universe)
 
         # Track last processed IDs to avoid duplicates
         self.last_finnhub_id = 0
@@ -270,7 +270,7 @@ class GlobalNewsIngestor:
     async def _fetch_sec_8k(self, hours_back: int = 2) -> List[GlobalNewsItem]:
         """Fetch SEC 8-K filings"""
         try:
-            filings = await self.sec_ingestor.fetch_8k_filings(hours_back=hours_back)
+            filings = await self.sec_ingestor.fetch_all_recent(hours_back=hours_back)
 
             items = []
             for filing in filings:
@@ -278,8 +278,8 @@ class GlobalNewsIngestor:
                     id=f"sec_{filing.accession_number}",
                     source="sec_8k",
                     headline=f"SEC 8-K: {filing.company_name} - {filing.form_type}",
-                    summary=filing.description or "",
-                    url=filing.filing_url,
+                    summary=filing.summary,
+                    url=filing.url,
                     published_at=filing.filed_date,
                     tickers=[filing.ticker] if filing.ticker else [],
                     source_priority=1  # Critical priority for SEC

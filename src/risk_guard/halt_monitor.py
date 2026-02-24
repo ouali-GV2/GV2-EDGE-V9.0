@@ -1,5 +1,6 @@
 """
-Halt Monitor - Trading Halt Tracking and Prediction
+Halt Monitor V8 - Trading Halt Tracking and Prediction
+=======================================================
 
 Monitors and predicts:
 - LULD (Limit Up/Limit Down) halts

@@ -1,6 +1,10 @@
 """
-SOCIAL BUZZ ENGINE V6.1 — PARTIALLY DEPRECATED (V9)
-=====================================================
+SOCIAL BUZZ ENGINE V6.1 — ACTIVE (sera remplacé par social_velocity.py — PLAN_AMELIORATION_V9)
+================================================================================================
+
+Ce module reste ACTIF et utilisé par scan_scheduler et batch_scheduler.
+Il sera remplacé par src.social_velocity.SocialVelocityEngine (V9) une fois ce module créé.
+Ne pas supprimer avant que social_velocity.py soit opérationnel.
 
 The raw mention counting in this module is supplemented by
 src.social_velocity.SocialVelocityEngine (V9) which measures

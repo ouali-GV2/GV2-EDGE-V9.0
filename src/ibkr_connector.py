@@ -405,8 +405,8 @@ class IBKRConnector:
             if qualified:
                 self.contract_cache[ticker] = qualified[0]
                 return qualified[0]
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"Contract qualification failed for {ticker}: {e}")
 
         # Fallback: unqualified contract
         self.contract_cache[ticker] = contract
@@ -701,7 +701,8 @@ class IBKRConnector:
         try:
             self.ib.reqCurrentTime()
             return True
-        except:
+        except Exception as e:
+            logger.debug(f"IBKR ping failed: {e}")
             self.connected = False
             return False
 

@@ -49,7 +49,7 @@ STOCKTWITS_ACCESS_TOKEN = os.getenv("STOCKTWITS_ACCESS_TOKEN", "")
 # ============================
 
 # Option 1 — Manual (recommended start)
-MANUAL_CAPITAL = 1000  
+MANUAL_CAPITAL = int(os.getenv("MANUAL_CAPITAL", "1000"))
 
 # Option 2 — Auto from IBKR
 USE_IBKR_CAPITAL = False  
@@ -143,7 +143,7 @@ ADVANCED_MONSTER_WEIGHTS = {
     "options_flow": 0.10,   # Options activity
     "social_buzz": 0.03,    # ↓ 6% → 3% (low reliability per review)
 }
-# Total = 1.0 (25+17+17+13+7+4+4+10+3 = 100%)
+# Monster Score V4 — Total = 1.0 (event25 + vol17 + pattern17 + pmtrans13 + optflow10 + accel7 + mom4 + sq4 + social3 = 100%)
 
 # ============================
 # PATTERN ANALYZER SETTINGS

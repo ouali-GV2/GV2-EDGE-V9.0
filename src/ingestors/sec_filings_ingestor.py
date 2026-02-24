@@ -531,9 +531,8 @@ class SECForm4Ingestor:
         entry: dict,
         ticker: str
     ) -> Optional[InsiderTransaction]:
-        """Parse RSS entry into InsiderTransaction"""
+        """Parse RSS entry into InsiderTransaction by fetching and parsing the XML filing."""
         try:
-            # Extract accession number
             link = entry.get("link", "")
             accession_match = re.search(r"(\d{10}-\d{2}-\d{6})", link)
             if not accession_match:
@@ -541,11 +540,9 @@ class SECForm4Ingestor:
 
             accession = accession_match.group(1)
 
-            # Parse title
+            # Parse title: "4 - Company Name (CIK)"
             title = entry.get("title", "")
-            # Format: "4 - Company Name (CIK)"
             title_match = re.match(r"4\s*-\s*(.+?)\s*\((\d+)\)", title)
-
             if title_match:
                 company_name = title_match.group(1).strip()
                 cik = title_match.group(2).zfill(10)
@@ -553,35 +550,151 @@ class SECForm4Ingestor:
                 company_name = title
                 cik = ""
 
-            # Parse date
-            updated = entry.get("updated", "")
-            try:
-                txn_date = datetime.fromisoformat(updated.replace("Z", "+00:00")).replace(tzinfo=None)
-            except:
-                txn_date = datetime.utcnow()
+            # Fetch and parse the actual XML document for real transaction data
+            xml_url = self._build_form4_xml_url(cik, accession)
+            xml_content = await self._fetch_form4_xml(xml_url) if xml_url else None
+            if not xml_content:
+                return None
 
-            # Note: Full Form 4 parsing requires fetching the XML filing
-            # For now, return basic info - can be enriched later
+            return self._parse_form4_xml(xml_content, accession, cik, ticker, company_name, link)
+
+        except Exception as e:
+            logger.warning(f"Error parsing Form 4 entry: {e}")
+            return None
+
+    def _build_form4_xml_url(self, cik: str, accession: str) -> Optional[str]:
+        """Construct the SEC EDGAR URL for a Form 4 XML document."""
+        if not cik or not accession:
+            return None
+        try:
+            cik_int = str(int(cik))  # Remove leading zeros for URL path
+            accession_nodash = accession.replace("-", "")
+            return (
+                f"https://www.sec.gov/Archives/edgar/data/"
+                f"{cik_int}/{accession_nodash}/{accession}.xml"
+            )
+        except (ValueError, AttributeError):
+            return None
+
+    async def _fetch_form4_xml(self, url: str) -> Optional[str]:
+        """Fetch Form 4 XML document from SEC EDGAR."""
+        try:
+            headers = {"User-Agent": "GV2-EDGE research@gv2edge.com"}
+            async with aiohttp.ClientSession(headers=headers) as session:
+                async with session.get(url, timeout=10) as resp:
+                    if resp.status != 200:
+                        logger.debug(f"Form 4 XML not found (status {resp.status}): {url}")
+                        return None
+                    return await resp.text()
+        except Exception as e:
+            logger.debug(f"Form 4 XML fetch error: {e}")
+            return None
+
+    def _parse_form4_xml(
+        self,
+        xml_content: str,
+        accession: str,
+        cik: str,
+        ticker: str,
+        company_name: str,
+        url: str
+    ) -> Optional[InsiderTransaction]:
+        """Parse Form 4 XML content into InsiderTransaction."""
+        try:
+            root = ET.fromstring(xml_content)
+
+            def node_text(parent, tag) -> str:
+                """Get text from child tag, checking <value> sub-element first."""
+                el = parent.find(tag) if parent is not None else None
+                if el is None:
+                    return ""
+                val = el.find("value")
+                return ((val.text if val is not None else el.text) or "").strip()
+
+            # Reporting owner
+            insider_name = ""
+            insider_title = ""
+            owner = root.find("reportingOwner")
+            if owner is not None:
+                owner_id = owner.find("reportingOwnerId")
+                if owner_id is not None:
+                    insider_name = node_text(owner_id, "rptOwnerName")
+                rel = owner.find("reportingOwnerRelationship")
+                if rel is not None:
+                    insider_title = node_text(rel, "officerTitle")
+                    if not insider_title and node_text(rel, "isDirector") == "1":
+                        insider_title = "Director"
+
+            # First non-derivative transaction
+            txn_date = datetime.utcnow()
+            transaction_code = ""
+            shares = 0
+            price = 0.0
+            shares_after = 0
+            ownership_type = "D"
+
+            nd_table = root.find("nonDerivativeTable")
+            if nd_table is not None:
+                txn = nd_table.find("nonDerivativeTransaction")
+                if txn is not None:
+                    # Date
+                    date_str = node_text(txn, "transactionDate")
+                    try:
+                        txn_date = datetime.strptime(date_str, "%Y-%m-%d")
+                    except ValueError:
+                        pass
+
+                    # Transaction code (P=Purchase, S=Sale, M=Exercise)
+                    coding = txn.find("transactionCoding")
+                    if coding is not None:
+                        transaction_code = node_text(coding, "transactionCode")
+
+                    # Amounts
+                    amounts = txn.find("transactionAmounts")
+                    if amounts is not None:
+                        try:
+                            shares = int(float(node_text(amounts, "transactionShares") or "0"))
+                        except (ValueError, TypeError):
+                            shares = 0
+                        try:
+                            price = float(node_text(amounts, "transactionPricePerShare") or "0")
+                        except (ValueError, TypeError):
+                            price = 0.0
+
+                    # Post-transaction shares
+                    post = txn.find("postTransactionAmounts")
+                    if post is not None:
+                        try:
+                            shares_after = int(float(
+                                node_text(post, "sharesOwnedFollowingTransaction") or "0"
+                            ))
+                        except (ValueError, TypeError):
+                            shares_after = 0
+
+                    # Ownership type (D=Direct, I=Indirect)
+                    own_nature = txn.find("ownershipNature")
+                    if own_nature is not None:
+                        ownership_type = node_text(own_nature, "directOrIndirectOwnership") or "D"
 
             return InsiderTransaction(
                 accession_number=accession,
                 cik=cik,
                 ticker=ticker,
                 company_name=company_name,
-                insider_name="",  # Requires XML parsing
-                insider_title="",
+                insider_name=insider_name,
+                insider_title=insider_title,
                 transaction_date=txn_date,
-                transaction_code="",  # Requires XML parsing
-                shares=0,
-                price=0.0,
-                value=0.0,
-                ownership_type="",
-                shares_after=0,
-                url=link
+                transaction_code=transaction_code,
+                shares=shares,
+                price=price,
+                value=shares * price,
+                ownership_type=ownership_type,
+                shares_after=shares_after,
+                url=url
             )
 
         except Exception as e:
-            logger.warning(f"Error parsing Form 4 entry: {e}")
+            logger.warning(f"Form 4 XML parse error: {e}")
             return None
 
     async def get_insider_summary(self, ticker: str, days_back: int = 30) -> Dict[str, Any]:

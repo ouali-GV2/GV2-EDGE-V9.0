@@ -302,6 +302,10 @@ class UnifiedSignal:
     # === LAYER 3: EXECUTION DECISION ===
     execution: Optional[ExecutionDecision] = None
 
+    # === LAYER 4: MULTI-RADAR V9 (informational — enrichment only) ===
+    # Populated when ENABLE_MULTI_RADAR=True, None otherwise
+    multi_radar_result: Optional[Dict[str, Any]] = None  # ConfluenceSignal.to_dict()
+
     # === METADATA ===
     # Risk badges (visible to trader)
     badges: List[str] = field(default_factory=list)

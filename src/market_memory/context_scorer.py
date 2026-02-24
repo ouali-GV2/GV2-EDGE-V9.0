@@ -385,7 +385,7 @@ class ContextScorer:
                 ep.positive_factors.append(f"Optimal trading time ({current_period})")
             elif current_period:
                 # Check if this is a bad time
-                time_stats = self._learner._time_stats.get(current_period, {})
+                time_stats = self._learner.time_stats.get(current_period, {})
                 if time_stats.get("win_rate", 50) < 40:
                     ep.time_bonus = -5.0
                     ep.negative_factors.append(f"Historically weak time period ({current_period})")
@@ -588,7 +588,7 @@ def is_market_memory_stable() -> Tuple[bool, Dict]:
     learner = scorer._learner
 
     stats = {
-        "total_misses": tracker.get_stats().total_recorded if hasattr(tracker, 'get_stats') else 0,
+        "total_misses": tracker.get_stats().total_misses if hasattr(tracker, 'get_stats') else 0,
         "trades_recorded": len(learner._trades) if hasattr(learner, '_trades') else 0,
         "patterns_learned": len(learner._patterns) if hasattr(learner, '_patterns') else 0,
         "ticker_profiles": len(learner._profiles) if hasattr(learner, '_profiles') else 0,

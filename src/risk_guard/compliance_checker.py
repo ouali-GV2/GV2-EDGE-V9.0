@@ -1,5 +1,6 @@
 """
-Compliance Checker - Exchange Compliance and Delisting Risk
+Compliance Checker V8 - Exchange Compliance and Delisting Risk
+==============================================================
 
 Monitors and detects:
 - NASDAQ/NYSE deficiency notifications
@@ -155,7 +156,7 @@ class ComplianceProfile:
     def get_position_multiplier(self) -> float:
         """Get position size multiplier based on risk."""
         multipliers = {
-            ComplianceRisk.CRITICAL: 0.0,   # Block entirely
+            ComplianceRisk.CRITICAL: 0.25,  # V8: plancher 0.25 — hard block géré par unified_guard si DELISTING_RISK
             ComplianceRisk.HIGH: 0.25,      # 25% of normal
             ComplianceRisk.MEDIUM: 0.50,    # 50% of normal
             ComplianceRisk.LOW: 0.75,       # 75% of normal

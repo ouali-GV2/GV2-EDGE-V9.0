@@ -384,8 +384,8 @@ class FinnhubWSScreener:
                     for cb in self._trade_callbacks:
                         try:
                             cb(symbol, price, volume)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug(f"Trade callback error for {symbol}: {e}")
 
         except json.JSONDecodeError:
             logger.debug(f"Invalid WS message: {raw_message[:100]}")

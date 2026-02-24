@@ -258,6 +258,11 @@ class PatternLearner:
         # Counter
         self._pattern_counter = 0
 
+    @property
+    def time_stats(self) -> Dict[str, Dict]:
+        """Public accessor for time-of-day performance stats."""
+        return self._time_stats
+
     def add_trade(self, trade: TradeRecord) -> None:
         """Add a trade to history."""
         self._trades[trade.id] = trade

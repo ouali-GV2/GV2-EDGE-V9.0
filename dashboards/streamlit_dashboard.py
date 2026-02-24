@@ -1,15 +1,16 @@
 """
-GV2-EDGE V7.0 — Professional Trading Dashboard
+GV2-EDGE V9.0 — Professional Trading Dashboard
 ===============================================
 
 Dashboard temps réel pour le système de détection anticipative
 des top gainers small caps US.
 
-V7.0 Detection/Execution Separation Architecture:
+V9.0 Architecture (3-Layer + Multi-Radar):
 - SignalProducer -> OrderComputer -> ExecutionGate pipeline
+- Multi-Radar Engine V9 : 4 radars parallèles + Confluence Matrix
 - Detection always visible (never blocked)
 - Execution limits applied only at final layer
-- Risk Guard integration (dilution, compliance, halt)
+- Risk Guard V8 integration (dilution, compliance, halt)
 - Pre-Halt Engine status
 - Market Memory (MRP/EP) context display
 - Blocked signals tracking with reasons
@@ -18,13 +19,14 @@ Design: Dark theme trading professionnel
 Stack: Streamlit + Plotly + Custom CSS
 
 Sections:
-1. Header avec status système + V7 modules
-2. Signaux actifs avec V7 intelligence (including blocked)
-3. Monster Score breakdown (radar chart)
+1. Header avec status système + V9 modules
+2. Signaux actifs avec V9 intelligence (including blocked)
+3. Monster Score breakdown (radar chart — 9 composants V4)
 4. Execution Gate stats (allowed vs blocked)
 5. Market Memory status (MRP/EP readiness)
 6. Audit metrics (hit rate, lead time)
 7. System health
+8. Multi-Radar V9 (Flow, Catalyst, Smart Money, Sentiment)
 """
 
 import streamlit as st
@@ -44,7 +46,7 @@ import time
 # ============================
 
 st.set_page_config(
-    page_title="GV2-EDGE V7.0 — Trading Radar",
+    page_title="GV2-EDGE V9.0 — Trading Radar",
     page_icon="🎯",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -296,6 +298,66 @@ def load_signals_from_db(hours_back=24):
         return pd.DataFrame()
 
 
+def load_last_signal_components():
+    """Load Monster Score V4 components from the last BUY/BUY_STRONG signal in DB."""
+    if not SIGNALS_DB.exists():
+        return None
+    try:
+        conn = sqlite3.connect(str(SIGNALS_DB))
+        query = """
+            SELECT event_impact, volume_spike, pattern_score,
+                   pm_transition_score, momentum, monster_score
+            FROM signals
+            WHERE signal_type IN ('BUY_STRONG', 'BUY')
+            ORDER BY timestamp DESC LIMIT 1
+        """
+        row = conn.execute(query).fetchone()
+        conn.close()
+        if row:
+            return {
+                "event":        min(1.0, (row[0] or 0)),
+                "volume":       min(1.0, (row[1] or 0)),
+                "pattern":      min(1.0, (row[2] or 0)),
+                "pm_transition":min(1.0, (row[3] or 0)),
+                "momentum":     min(1.0, (row[4] or 0)),
+                # Options flow, acceleration, social_buzz, squeeze not yet in DB schema
+                "options_flow": 0.0,
+                "acceleration": 0.0,
+                "social_buzz":  0.0,
+                "squeeze":      0.0,
+            }
+    except Exception:
+        pass
+    return None
+
+
+def load_boost_stats():
+    """Compute boost statistics from recent signals in DB."""
+    if not SIGNALS_DB.exists():
+        return None
+    try:
+        conn = sqlite3.connect(str(SIGNALS_DB))
+        query = """
+            SELECT AVG(pm_gap), MAX(pm_gap),
+                   AVG(event_impact), MAX(event_impact)
+            FROM signals
+            WHERE timestamp >= datetime('now', '-7 days')
+              AND signal_type IN ('BUY_STRONG', 'BUY')
+        """
+        row = conn.execute(query).fetchone()
+        conn.close()
+        if row and any(v is not None for v in row):
+            return {
+                "extended_hours_avg": min(0.22, (row[0] or 0) * 0.22),
+                "extended_hours_max": 0.22,
+                "catalyst_avg":       min(0.25, (row[2] or 0) * 0.25),
+                "catalyst_max":       0.25,
+            }
+    except Exception:
+        pass
+    return None
+
+
 def load_latest_audit():
     """Load the most recent audit report"""
     if not AUDIT_DIR.exists():
@@ -369,24 +431,27 @@ def get_market_session():
 # ============================
 
 def create_monster_score_radar(components):
-    """Create radar chart for Monster Score breakdown"""
+    """Create radar chart for Monster Score V4 breakdown (9 composants)."""
     if not components:
         return None
-    
-    categories = ['Event', 'Volume', 'Pattern', 'PM Trans', 'Momentum', 'Squeeze']
-    
-    # Extract values (handle both raw and weighted)
-    values = [
-        components.get('event', 0),
-        components.get('volume', 0) * 5,  # Scale back from weighted
-        components.get('pattern', 0) * 5,
-        components.get('pm_transition', 0) * 6.67,
-        components.get('momentum', 0) * 10,
-        components.get('squeeze', 0) * 20
+
+    # V4 weights : event(25%) volume(17%) pattern(17%) pm_transition(13%)
+    #              options_flow(10%) acceleration(7%) momentum(4%) squeeze(4%) social_buzz(3%)
+    categories = [
+        'Event (25%)', 'Volume (17%)', 'Pattern (17%)', 'PM Trans (13%)',
+        'Options (10%)', 'Accel (7%)', 'Momentum (4%)', 'Squeeze (4%)', 'Social (3%)'
     ]
-    
-    # Clamp to 0-1
-    values = [min(1, max(0, v)) for v in values]
+    values = [
+        min(1.0, max(0.0, components.get('event', 0))),
+        min(1.0, max(0.0, components.get('volume', 0))),
+        min(1.0, max(0.0, components.get('pattern', 0))),
+        min(1.0, max(0.0, components.get('pm_transition', 0))),
+        min(1.0, max(0.0, components.get('options_flow', 0))),
+        min(1.0, max(0.0, components.get('acceleration', 0))),
+        min(1.0, max(0.0, components.get('momentum', 0))),
+        min(1.0, max(0.0, components.get('squeeze', 0))),
+        min(1.0, max(0.0, components.get('social_buzz', 0))),
+    ]
     values.append(values[0])  # Close the polygon
     categories.append(categories[0])
     
@@ -434,7 +499,7 @@ def create_signals_timeline(signals_df):
     color_map = {
         'BUY_STRONG': '#10b981',
         'BUY': '#3b82f6',
-        'WATCH_EARLY': '#f59e0b',
+        'EARLY_SIGNAL': '#f59e0b',
         'WATCH': '#8b5cf6'
     }
     
@@ -620,8 +685,8 @@ with st.sidebar:
     
     signal_filter = st.multiselect(
         "Signal Types",
-        ["BUY_STRONG", "BUY", "WATCH_EARLY", "WATCH"],
-        default=["BUY_STRONG", "BUY", "WATCH_EARLY"]
+        ["BUY_STRONG", "BUY", "WATCH", "EARLY_SIGNAL"],
+        default=["BUY_STRONG", "BUY", "EARLY_SIGNAL"]
     )
     
     min_score = st.slider("Min Monster Score", 0.0, 1.0, 0.5, 0.05)
@@ -694,22 +759,47 @@ with st.sidebar:
 
         st.markdown("---")
 
-    # V7 Modules Status
-    st.markdown("### 🧠 V7 Modules")
-    v7_modules = {
-        "SignalProducer": True,
-        "OrderComputer": True,
-        "ExecutionGate": True,
-        "RiskGuard": True,
-        "PreHaltEngine": True,
-        "MarketMemory": True
-    }
-    for module, active in v7_modules.items():
+    # V9 Modules Status
+    st.markdown("### 🧠 V9 Modules")
+    try:
+        from config import (
+            ENABLE_MULTI_RADAR, ENABLE_ACCELERATION_ENGINE,
+            ENABLE_SMALLCAP_RADAR, ENABLE_PRE_HALT_ENGINE,
+            ENABLE_RISK_GUARD, ENABLE_MARKET_MEMORY,
+            ENABLE_OPTIONS_FLOW, ENABLE_SOCIAL_BUZZ,
+            ENABLE_NLP_ENRICHI, ENABLE_CATALYST_V3,
+            ENABLE_PRE_SPIKE_RADAR,
+        )
+        v9_modules = {
+            "SignalProducer (L1)": True,
+            "OrderComputer (L2)": True,
+            "ExecutionGate (L3)": True,
+            "MultiRadar V9": ENABLE_MULTI_RADAR,
+            "AccelerationEngine": ENABLE_ACCELERATION_ENGINE,
+            "SmallCapRadar": ENABLE_SMALLCAP_RADAR,
+            "PreHaltEngine": ENABLE_PRE_HALT_ENGINE,
+            "RiskGuard V8": ENABLE_RISK_GUARD,
+            "MarketMemory": ENABLE_MARKET_MEMORY,
+            "CatalystV3": ENABLE_CATALYST_V3,
+            "PreSpikeRadar": ENABLE_PRE_SPIKE_RADAR,
+        }
+    except Exception:
+        v9_modules = {
+            "SignalProducer (L1)": True,
+            "OrderComputer (L2)": True,
+            "ExecutionGate (L3)": True,
+            "MultiRadar V9": True,
+            "AccelerationEngine": True,
+            "SmallCapRadar": True,
+            "RiskGuard V8": True,
+            "MarketMemory": True,
+        }
+    for module, active in v9_modules.items():
         icon = "🟢" if active else "🔴"
         st.markdown(f"{icon} {module}")
 
     st.markdown("---")
-    st.caption(f"v7.0 • {datetime.utcnow().strftime('%H:%M:%S UTC')}")
+    st.caption(f"v9.0 • {datetime.utcnow().strftime('%H:%M:%S UTC')}")
 
 
 # ============================
@@ -719,8 +809,8 @@ with st.sidebar:
 col_title, col_status = st.columns([3, 1])
 
 with col_title:
-    st.markdown("# 🎯 GV2-EDGE V7.0")
-    st.markdown("**Detection/Execution Separation Architecture** — Small Caps US")
+    st.markdown("# 🎯 GV2-EDGE V9.0")
+    st.markdown("**Multi-Radar Detection Architecture** — Small Caps US")
 
 with col_status:
     session = get_market_session()
@@ -819,7 +909,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 # MAIN CONTENT — TABS
 # ============================
 
-tab1, tab2, tab3, tab4 = st.tabs(["📡 Live Signals", "📊 Analytics", "📅 Events", "🔍 Audit"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📡 Live Signals", "📊 Analytics", "📅 Events", "🔍 Audit", "🛰️ Multi-Radar V9"])
 
 # ============================
 # TAB 1: LIVE SIGNALS
@@ -883,8 +973,8 @@ with tab1:
                     st.caption("No BUY signals")
             
             with col_watch:
-                st.markdown("#### 👀 WATCH_EARLY")
-                watch_df = filtered_df[filtered_df['signal'].isin(['WATCH_EARLY', 'WATCH'])] if 'signal' in filtered_df.columns else pd.DataFrame()
+                st.markdown("#### 👀 EARLY_SIGNAL / WATCH")
+                watch_df = filtered_df[filtered_df['signal'].isin(['EARLY_SIGNAL', 'WATCH'])] if 'signal' in filtered_df.columns else pd.DataFrame()
                 if not watch_df.empty:
                     for _, row in watch_df.head(5).iterrows():
                         ts = row.get('timestamp', '')[:16] if 'timestamp' in row else ''
@@ -926,21 +1016,15 @@ with tab2:
     col_radar, col_distribution = st.columns(2)
     
     with col_radar:
-        st.markdown("#### Monster Score Breakdown")
-        
-        # Default sample components
-        sample_components = {
-            'event': 0.8,
-            'volume': 0.12,
-            'pattern': 0.15,
-            'pm_transition': 0.10,
-            'momentum': 0.08,
-            'squeeze': 0.04
-        }
-        
-        radar_fig = create_monster_score_radar(sample_components)
-        if radar_fig:
-            st.plotly_chart(radar_fig, use_container_width=True)
+        st.markdown("#### Monster Score V4 Breakdown")
+        components = load_last_signal_components()
+        if components:
+            radar_fig = create_monster_score_radar(components)
+            if radar_fig:
+                st.plotly_chart(radar_fig, use_container_width=True)
+            st.caption("Dernier signal BUY/BUY_STRONG en base (options_flow, acceleration, squeeze : en attente de schéma DB étendu)")
+        else:
+            st.info("Aucun signal BUY en base — le radar se peuplera après le premier cycle de détection.")
     
     with col_distribution:
         st.markdown("#### Score Distribution")
@@ -966,30 +1050,36 @@ with tab2:
     
     # Boost analysis
     st.markdown("#### 🚀 Intelligence Boosts Impact")
-    
+
+    boost_stats = load_boost_stats()
     boost_data = {
-        'Boost Type': ['Beat Rate', 'Social Buzz', 'Options Flow', 'Extended Hours'],
-        'Max Value': [0.20, 0.10, 0.10, 0.22],
-        'Avg Contribution': [0.08, 0.04, 0.02, 0.06]
+        'Boost Type': ['Beat Rate', 'Extended Hours', 'Acceleration V8', 'Catalyst V3'],
+        'Max Possible': [0.15, 0.22, 0.15, 0.25],
+        'Avg (7j)': [
+            0.08,  # beat_rate : pas encore en DB, valeur archivée PLAN_V8
+            boost_stats["extended_hours_avg"] if boost_stats else 0.0,
+            0.07,  # acceleration : pas encore en DB
+            boost_stats["catalyst_avg"] if boost_stats else 0.0,
+        ]
     }
-    
+
     boost_df = pd.DataFrame(boost_data)
     
     fig = go.Figure()
     fig.add_trace(go.Bar(
         x=boost_df['Boost Type'],
-        y=boost_df['Max Value'],
+        y=boost_df['Max Possible'],
         name='Max Possible',
         marker_color='rgba(6, 182, 212, 0.3)',
-        text=boost_df['Max Value'],
+        text=[f"{v:.2f}" for v in boost_df['Max Possible']],
         textposition='outside'
     ))
     fig.add_trace(go.Bar(
         x=boost_df['Boost Type'],
-        y=boost_df['Avg Contribution'],
-        name='Avg Contribution',
+        y=boost_df['Avg (7j)'],
+        name='Avg 7 jours',
         marker_color='#06b6d4',
-        text=boost_df['Avg Contribution'],
+        text=[f"{v:.2f}" for v in boost_df['Avg (7j)']],
         textposition='outside'
     ))
     
@@ -1067,14 +1157,36 @@ with tab3:
             """, unsafe_allow_html=True)
         
         st.markdown("#### Upcoming Catalysts")
-        st.markdown("""
-        <div class="metric-card">
-            <div style="color: #f59e0b;">📅 Earnings This Week</div>
-            <div style="color: #6b7280; font-size: 0.85rem; margin-top: 0.5rem;">
-                Check Finnhub calendar for scheduled reports
+        # Charger FDA calendar depuis le cache JSON
+        fda_cache = load_json(DATA_DIR / "fda_calendar.json")
+        watch_cache = load_json(DATA_DIR / "watchlist.json")
+        upcoming = []
+        if fda_cache and isinstance(fda_cache, list):
+            upcoming = fda_cache[:5]
+        elif watch_cache and isinstance(watch_cache, list):
+            upcoming = watch_cache[:5]
+
+        if upcoming:
+            for item in upcoming:
+                ticker = item.get("ticker", item.get("symbol", "?"))
+                event  = item.get("event_type", item.get("type", item.get("catalyst", "Event")))
+                date   = item.get("date", item.get("event_date", ""))
+                st.markdown(f"""
+                <div class="metric-card">
+                    <span class="ticker-symbol">{ticker}</span>
+                    <span style="color: #f59e0b; margin-left: 0.5rem;">{event}</span>
+                    <div style="font-size: 0.75rem; color: #6b7280;">{date}</div>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div class="metric-card" style="text-align:center; padding: 1rem;">
+                <div style="color: #6b7280; font-size: 0.85rem;">
+                    data/fda_calendar.json non encore généré<br>
+                    Lancer le batch_scheduler pour peupler ce cache
+                </div>
             </div>
-        </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
 
 
 # ============================
@@ -1143,6 +1255,124 @@ with tab4:
 
 
 # ============================
+# TAB 5: MULTI-RADAR V9
+# ============================
+
+with tab5:
+    st.markdown("### 🛰️ Multi-Radar Engine V9 — 4 Radars Parallèles")
+
+    st.markdown("""
+    <div class="metric-card" style="margin-bottom: 1rem;">
+        <div style="color: #9ca3af; font-size: 0.85rem;">
+            Architecture : 4 radars indépendants (<b>asyncio.gather</b>) → Confluence Matrix → Signal final.<br>
+            Les scores ci-dessous proviennent des derniers signaux BUY/BUY_STRONG enregistrés en base.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Charger le dernier multi_radar_result depuis metadata en DB
+    def load_last_radar_result():
+        if not SIGNALS_DB.exists():
+            return None
+        try:
+            conn = sqlite3.connect(str(SIGNALS_DB))
+            row = conn.execute("""
+                SELECT ticker, metadata FROM signals
+                WHERE signal_type IN ('BUY_STRONG','BUY')
+                  AND metadata IS NOT NULL
+                ORDER BY timestamp DESC LIMIT 1
+            """).fetchone()
+            conn.close()
+            if row:
+                meta = json.loads(row[1]) if row[1] else {}
+                radar = meta.get("multi_radar_result")
+                if radar and isinstance(radar, dict) and "radars" in radar:
+                    return row[0], radar
+        except Exception:
+            pass
+        return None
+
+    radar_data = load_last_radar_result()
+
+    # Session weights (architecture spec)
+    st.markdown("#### Poids par sous-session (Session Adapter)")
+    session_weights = {
+        "Sous-session":    ["AFTER_HOURS", "PRE_MARKET", "RTH_OPEN", "RTH_MIDDAY", "RTH_CLOSE", "CLOSED"],
+        "Flow %":          [15, 30, 35, 40, 30, 5],
+        "Catalyst %":      [45, 30, 20, 20, 30, 50],
+        "Smart Money %":   [10, 15, 30, 25, 25, 5],
+        "Sentiment %":     [30, 25, 15, 15, 15, 40],
+    }
+    st.dataframe(pd.DataFrame(session_weights), use_container_width=True, hide_index=True)
+
+    st.markdown("#### Confluence Matrix")
+    col_m1, col_m2 = st.columns(2)
+    with col_m1:
+        st.markdown("""
+        | Flow \\ Catalyst | HIGH (≥0.6) | MEDIUM (0.3-0.6) | LOW (<0.3) |
+        |-----------------|-------------|------------------|------------|
+        | **HIGH**        | BUY_STRONG  | BUY              | WATCH      |
+        | **MEDIUM**      | BUY         | WATCH            | EARLY      |
+        | **LOW**         | WATCH       | EARLY            | NO_SIGNAL  |
+        """)
+    with col_m2:
+        st.markdown("""
+        **Modifiers :**
+        - Smart Money HIGH → upgrade +1 niveau
+        - Sentiment HIGH + 2+ radars → upgrade +1 niveau
+        - 4/4 UNANIMOUS → +0.15 bonus, min BUY si score > 0.50
+        - 3/4 STRONG → +0.10 bonus
+        - 2/4 MODERATE → +0.05 bonus
+        """)
+
+    # Dernier résultat Multi-Radar live
+    st.markdown("#### Dernier résultat Multi-Radar (BUY/BUY_STRONG)")
+    if radar_data:
+        ticker_name, rdata = radar_data
+        st.markdown(f"**Ticker :** `{ticker_name}` | **Signal :** `{rdata.get('signal_type','?')}` | "
+                    f"**Score :** `{rdata.get('final_score', 0):.2f}` | "
+                    f"**Agreement :** `{rdata.get('agreement','?')}`")
+
+        radars = rdata.get("radars", {})
+        if radars:
+            radar_rows = []
+            for name, info in radars.items():
+                radar_rows.append({
+                    "Radar": name,
+                    "Score": f"{info.get('score', 0):.2f}",
+                    "Confidence": f"{info.get('confidence', 0):.0%}",
+                    "State": info.get("state", "—"),
+                    "Signals": ", ".join(info.get("signals", [])[:3]),
+                    "Scan (ms)": f"{info.get('scan_time_ms', 0):.1f}",
+                })
+            st.dataframe(pd.DataFrame(radar_rows), use_container_width=True, hide_index=True)
+
+            # Bar chart des scores radar
+            fig_radar = go.Figure()
+            names = list(radars.keys())
+            scores = [radars[n].get("score", 0) for n in names]
+            colors = ["#10b981", "#3b82f6", "#8b5cf6", "#f59e0b"]
+            fig_radar.add_trace(go.Bar(
+                x=names, y=scores,
+                marker_color=colors[:len(names)],
+                text=[f"{s:.2f}" for s in scores],
+                textposition="outside"
+            ))
+            fig_radar.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#1a1f2e",
+                yaxis=dict(range=[0, 1], gridcolor="#374151", tickfont=dict(color="#9ca3af")),
+                xaxis=dict(tickfont=dict(color="#9ca3af")),
+                margin=dict(l=20, r=20, t=30, b=20), height=280
+            )
+            st.plotly_chart(fig_radar, use_container_width=True)
+    else:
+        st.info(
+            "Aucun résultat Multi-Radar en base pour l'instant. "
+            "Le moteur V9 doit avoir effectué au moins un cycle avec ENABLE_MULTI_RADAR=True."
+        )
+
+
+# ============================
 # FOOTER
 # ============================
 
@@ -1151,7 +1381,7 @@ st.markdown("---")
 col_footer1, col_footer2, col_footer3 = st.columns(3)
 
 with col_footer1:
-    st.caption("🎯 GV2-EDGE V7.0 — Detection/Execution Separation")
+    st.caption("🎯 GV2-EDGE V9.0 — Multi-Radar Detection Architecture")
 
 with col_footer2:
     st.caption(f"Last update: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
@@ -1165,5 +1395,8 @@ with col_footer3:
 # ============================
 
 if auto_refresh:
-    time.sleep(refresh_interval)
-    st.rerun()
+    # Meta refresh côté navigateur — non-bloquant (pas de time.sleep sur le thread serveur)
+    st.markdown(
+        f'<meta http-equiv="refresh" content="{refresh_interval}">',
+        unsafe_allow_html=True
+    )

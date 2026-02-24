@@ -1,3 +1,16 @@
+"""
+Event Hub V9 - Central Catalyst Event Hub
+==========================================
+
+Aggregates, caches, and enriches catalyst events from all sources:
+- SEC 8-K filings (via EventHub pipeline)
+- Finnhub company news
+- FDA calendar (PDUFA, trials, conferences)
+- NLP classification via Grok (18 event types, 5 tiers)
+
+Cache TTL: 15 min. Singleton: get_event_hub()
+"""
+
 import json
 import os
 from datetime import datetime, timedelta

@@ -134,7 +134,7 @@ class InsiderBoostEngine:
 
     def __init__(self, universe: Set[str] = None):
         self.universe = universe or set()
-        self.form4_ingestor = SECForm4Ingestor(universe)
+        self.form4_ingestor = SECForm4Ingestor()
 
         # Cache for recent analyses
         self._cache: Dict[str, InsiderBoostResult] = {}
@@ -143,7 +143,6 @@ class InsiderBoostEngine:
     def set_universe(self, universe: Set[str]):
         """Update universe"""
         self.universe = universe
-        self.form4_ingestor.set_universe(universe)
 
     async def analyze(
         self,
@@ -168,10 +167,10 @@ class InsiderBoostEngine:
         if cached:
             return cached
 
-        # Fetch Form 4 transactions
-        transactions = await self.form4_ingestor.fetch_form4(
+        # Fetch Form 4 transactions (convert hours to days)
+        transactions = await self.form4_ingestor.fetch_insider_transactions(
             ticker,
-            hours_back=hours_back
+            days_back=max(1, hours_back // 24)
         )
 
         # Build result
@@ -218,7 +217,7 @@ class InsiderBoostEngine:
         largest_buy = 0.0
 
         for tx in result.transactions:
-            if tx.transaction_type == "BUY":
+            if tx.transaction_code == "P":  # P=Purchase (SEC Form 4 standard)
                 result.buy_count += 1
                 result.total_buy_value += tx.value
                 buyers.add(tx.insider_name)
@@ -229,7 +228,7 @@ class InsiderBoostEngine:
                 if any(t in title for t in ["CEO", "CFO", "COO", "PRESIDENT", "CHIEF"]):
                     has_exec = True
 
-            elif tx.transaction_type == "SELL":
+            elif tx.transaction_code == "S":  # S=Sale (SEC Form 4 standard)
                 result.sell_count += 1
                 result.total_sell_value += tx.value
 
@@ -241,7 +240,7 @@ class InsiderBoostEngine:
         if result.unique_buyers >= CLUSTER_MIN_INSIDERS:
             # Verify transactions are within cluster window
             if result.transactions:
-                times = [tx.filed_date for tx in result.transactions if tx.transaction_type == "BUY"]
+                times = [tx.transaction_date for tx in result.transactions if tx.transaction_code == "P"]
                 if times:
                     min_time = min(times)
                     max_time = max(times)
