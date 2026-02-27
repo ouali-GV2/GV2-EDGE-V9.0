@@ -423,10 +423,10 @@ def phase_pipeline(ticker: str = "AAPL"):
         result = computer.compute_order(signal, market)
         order = result.proposed_order if hasattr(result, "proposed_order") else None
         if order:
-            print(f"         shares={order.shares}  entry={order.entry_price:.2f}"
-                  f"  stop={order.stop_loss:.2f}")
+            print(f"         size={order.size_shares} shares  ${order.size_usd:.0f}"
+                  f"  stop={order.stop_loss:.2f if order.stop_loss else 0:.2f}")
         else:
-            print(f"         order=None (signal non-actionable ou capital insuffisant)")
+            print(f"         proposed_order=None (signal non-actionable ou capital insuffisant)")
         return result
 
     sig_with_order = None
