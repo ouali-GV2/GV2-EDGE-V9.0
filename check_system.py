@@ -357,23 +357,24 @@ def phase_pipeline(ticker: str = "AAPL"):
     def check_signal_producer():
         import asyncio
         from src.engines.signal_producer import get_signal_producer, DetectionInput
-        from src.models.signal_types import PreSpikeState, PreHaltState
+        from src.models.signal_types import PreSpikeState
         from src.engines.acceleration_engine import get_acceleration_engine
 
-        accel_result = get_acceleration_engine().score(ticker)
-
+        accel = get_acceleration_engine().score(ticker)
         inp = DetectionInput(
             ticker=ticker,
+            current_price=180.0,
             monster_score=0.72,
-            event_score=0.60,
-            has_catalyst=True,
-            volume_zscore=2.8,
-            price_change_pct=4.2,
+            catalyst_score=0.60,
+            catalyst_confidence=0.8,
             pre_spike_state=PreSpikeState.CHARGING,
-            pre_halt_state=PreHaltState.LOW,
-            accel_state=accel_result.state,
-            accel_score=accel_result.acceleration_score,
-            vol_zscore_accel=accel_result.volume_zscore,
+            volume_ratio=2.8,
+            price_change_pct=4.2,
+            acceleration_state=accel.state,
+            acceleration_score=accel.acceleration_score,
+            volume_zscore=accel.volume_zscore,
+            accumulation_score=accel.accumulation_score,
+            breakout_readiness=accel.breakout_readiness,
             repeat_gainer_score=0.0,
             social_buzz_score=0.3,
         )
@@ -384,31 +385,56 @@ def phase_pipeline(ticker: str = "AAPL"):
 
         signal = asyncio.run(_run())
         print(f"         signal={signal.signal_type.value}  score={signal.final_score:.3f}")
+        return signal
 
-    _check("SignalProducer.detect() [async]", check_signal_producer)
+    sig = None
+    try:
+        sig = check_signal_producer()
+        _ok("SignalProducer.detect() [async]")
+    except Exception as e:
+        _fail("SignalProducer.detect() [async]", str(e).split("\n")[0][:120])
 
-    # Étape 5: OrderComputer
-    def check_order_computer():
-        from src.engines.order_computer import OrderComputer
-        from src.models.signal_types import SignalType
-        import config as cfg
+    # Étape 5: OrderComputer (prend UnifiedSignal + MarketContext)
+    def check_order_computer(signal=None):
+        import asyncio
+        from src.engines.signal_producer import get_signal_producer, DetectionInput
+        from src.models.signal_types import PreSpikeState
+        from src.engines.order_computer import OrderComputer, MarketContext
+        from src.engines.acceleration_engine import get_acceleration_engine
 
-        capital = getattr(cfg, "MANUAL_CAPITAL", getattr(cfg, "TRADING_CAPITAL", 1000))
-        computer = OrderComputer()
-        order = computer.compute_order(
-            ticker=ticker,
-            signal_type=SignalType.BUY,
-            current_price=180.0,
-            atr=2.5,
-            available_capital=capital * 0.8,
+        # Créer un signal minimal si non fourni
+        if signal is None:
+            accel = get_acceleration_engine().score(ticker)
+            inp = DetectionInput(
+                ticker=ticker, current_price=180.0, monster_score=0.72,
+                catalyst_score=0.60, acceleration_state=accel.state,
+                acceleration_score=accel.acceleration_score,
+                volume_zscore=accel.volume_zscore,
+            )
+            async def _detect():
+                return await get_signal_producer().detect(inp)
+            signal = asyncio.run(_detect())
+
+        market = MarketContext(
+            current_price=180.0, atr=2.5, atr_pct=1.4,
+            current_volume=1_500_000, avg_volume=800_000, volume_ratio=1.9,
         )
+        computer = OrderComputer()
+        result = computer.compute_order(signal, market)
+        order = result.proposed_order if hasattr(result, "proposed_order") else None
         if order:
             print(f"         shares={order.shares}  entry={order.entry_price:.2f}"
-                  f"  stop={order.stop_loss:.2f}  R/R={order.risk_reward:.1f}")
+                  f"  stop={order.stop_loss:.2f}")
         else:
-            print(f"         order=None (capital ou filtre)")
+            print(f"         order=None (signal non-actionable ou capital insuffisant)")
+        return result
 
-    _check("OrderComputer.compute_order()", check_order_computer)
+    sig_with_order = None
+    try:
+        sig_with_order = check_order_computer(sig)
+        _ok("OrderComputer.compute_order(signal, market)")
+    except Exception as e:
+        _fail("OrderComputer.compute_order(signal, market)", str(e).split("\n")[0][:120])
 
     # Étape 6: UnifiedGuard [async]
     def check_risk_guard():
@@ -418,7 +444,7 @@ def phase_pipeline(ticker: str = "AAPL"):
         guard = get_unified_guard()
 
         async def _run():
-            return await guard.assess(ticker, price=180.0, volume=800_000)
+            return await guard.assess(ticker, current_price=180.0)
 
         assessment = asyncio.run(_run())
         print(f"         risk_level={assessment.risk_level}  "
@@ -427,28 +453,34 @@ def phase_pipeline(ticker: str = "AAPL"):
 
     _check("UnifiedGuard.assess() [async]", check_risk_guard)
 
-    # Étape 7: ExecutionGate
-    def check_execution_gate():
+    # Étape 7: ExecutionGate (prend UnifiedSignal)
+    def check_execution_gate(signal=None):
+        import asyncio
+        from src.engines.signal_producer import get_signal_producer, DetectionInput
+        from src.models.signal_types import PreSpikeState
         from src.engines.execution_gate import ExecutionGate
-        from src.engines.order_computer import OrderComputer
-        from src.models.signal_types import SignalType
-        import config as cfg
+        from src.engines.acceleration_engine import get_acceleration_engine
 
-        capital = getattr(cfg, "MANUAL_CAPITAL", getattr(cfg, "TRADING_CAPITAL", 1000))
-        computer = OrderComputer()
-        order = computer.compute_order(
-            ticker=ticker,
-            signal_type=SignalType.BUY,
-            current_price=180.0,
-            atr=2.5,
-            available_capital=capital * 0.8,
-        )
+        if signal is None:
+            accel = get_acceleration_engine().score(ticker)
+            inp = DetectionInput(
+                ticker=ticker, current_price=180.0, monster_score=0.72,
+                catalyst_score=0.60, acceleration_state=accel.state,
+                acceleration_score=accel.acceleration_score,
+                volume_zscore=accel.volume_zscore,
+            )
+            async def _detect():
+                return await get_signal_producer().detect(inp)
+            signal = asyncio.run(_detect())
+
         gate = ExecutionGate()
-        decision = gate.evaluate(order, daily_trades=0)
-        print(f"         status={decision.status.value}  "
-              f"reason={decision.block_reason.value if decision.block_reason else 'None'}")
+        result = gate.evaluate(signal)
+        status = result.execution.status if hasattr(result, "execution") and result.execution else "N/A"
+        if hasattr(status, "value"):
+            status = status.value
+        print(f"         execution_status={status}")
 
-    _check("ExecutionGate.evaluate()", check_execution_gate)
+    _check("ExecutionGate.evaluate(signal)", lambda: check_execution_gate(sig_with_order))
 
     # Étape 8: Multi-Radar [async]
     def check_multi_radar():
@@ -461,9 +493,10 @@ def phase_pipeline(ticker: str = "AAPL"):
             return await engine.scan_ticker(ticker)
 
         result = asyncio.run(_run())
-        print(f"         signal={result.signal_type.value}  "
-              f"flow={result.flow_score:.2f}  "
-              f"catalyst={result.catalyst_score:.2f}  "
+        # signal_type est une string (pas un enum) dans ConfluenceSignal
+        sig_type = result.signal_type
+        print(f"         signal={sig_type}  "
+              f"final_score={result.final_score:.2f}  "
               f"lead={result.lead_radar}")
 
     _check("MultiRadarEngine.scan_ticker() [async]", check_multi_radar)
