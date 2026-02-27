@@ -18,6 +18,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Callable, Any, Tuple
 import asyncio
 import logging
+import os
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 import threading
 
@@ -167,7 +168,10 @@ class BatchTask:
 class ProcessorConfig:
     """Configuration for batch processor."""
     # Parallelism
-    max_workers: int = 4
+    # CX22 (4 vCPU/8 GB): keep at 2 to avoid OOM when ProcessPoolExecutor
+    # runs alongside the main trading process (~4 GB already used).
+    # CX43 (8 vCPU/16 GB): can raise to 4.
+    max_workers: int = int(os.getenv("BATCH_MAX_WORKERS", "2"))
     use_multiprocessing: bool = False  # True for CPU-bound
     max_concurrent_tasks: int = 2
 

@@ -52,7 +52,7 @@ from utils.logger import get_logger
 # truly runs in parallel (~200ms total vs ~35s serial).
 # Separate from feature_engine's _executor (4 workers) to avoid contention.
 _executor = concurrent.futures.ThreadPoolExecutor(
-    max_workers=6,
+    max_workers=4,   # 1 worker per radar (Flow, Catalyst, SmartMoney, Sentiment)
     thread_name_prefix="radar-io"
 )
 
