@@ -106,7 +106,7 @@ def scan_afterhours_news(tickers=None):
                 timestamp = news.get("timestamp", 0)
                 
                 if timestamp:
-                    news_time = datetime.fromtimestamp(timestamp)
+                    news_time = datetime.fromtimestamp(timestamp, tz=timezone.utc)
                     age_hours = (datetime.now(timezone.utc) - news_time).total_seconds() / 3600
                     
                     if age_hours <= 4:  # Recent news

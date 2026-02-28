@@ -1,39 +1,26 @@
-version: "3.9"
-
 services:
 
-  # ============================================
-  # IB Gateway - Headless IBKR API
-  # ============================================
-  # Runs IB Gateway + IBC + Xvfb in a container.
-  # Exposes API on ports 4001 (live) / 4002 (paper).
-  # Auto-restarts on crash or daily IB reset (~23:45 ET).
-  # ============================================
   ibgateway:
-    build: ./docker/ibgateway
+    image: ghcr.io/gnzsnz/ib-gateway:10.44.1f
     container_name: ibgateway
     restart: unless-stopped
 
-    env_file:
-      - .env
+    environment:
+      - TWS_USERID=${IBKR_USER}
+      - TWS_PASSWORD=${IBKR_PASS}
+      - TRADING_MODE=${TRADING_MODE:-paper}
+      - TZ=America/New_York
 
     ports:
-      - "4001:4001"
-      - "4002:4002"
+      - "4001:4003"
+      - "4002:4004"
 
     volumes:
-      - ibgateway-jts:/root/Jts
+      - ibgateway-jts:/home/ibgateway/jts
+      - ibgateway-ibc:/home/ibgateway/ibc
 
-    mem_limit: 1g
-    mem_reservation: 512m
-
-    # Healthy once API port responds (120s startup grace)
-    healthcheck:
-      test: ["CMD", "/opt/scripts/healthcheck.sh"]
-      interval: 30s
-      timeout: 5s
-      start_period: 120s
-      retries: 3
+    mem_limit: 2g
+    mem_reservation: 1g
 
     logging:
       driver: json-file
@@ -41,18 +28,14 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # ============================================
-  # GV2-EDGE - Trading Engine + Dashboard
-  # ============================================
   gv2-edge:
     build: .
     container_name: gv2-edge
     restart: unless-stopped
 
-    # Wait for IB Gateway API to be healthy before starting
     depends_on:
       ibgateway:
-        condition: service_healthy
+        condition: service_started
 
     ports:
       - "8501:8501"
@@ -65,12 +48,10 @@ services:
 
     environment:
       - TZ=UTC
-      # Connect to IB Gateway container via Docker network
       - IBKR_HOST=ibgateway
-      - IBKR_PORT=4001
+      - IBKR_PORT=4004
       - USE_IBKR_DATA=True
 
-    # Limite memoire (CX33: 8Go total, IB Gateway prend 1Go)
     mem_limit: 4g
     mem_reservation: 2g
 
@@ -82,4 +63,6 @@ services:
 
 volumes:
   ibgateway-jts:
+    driver: local
+  ibgateway-ibc:
     driver: local

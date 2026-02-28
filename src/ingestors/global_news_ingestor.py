@@ -182,11 +182,11 @@ class GlobalNewsIngestor:
         filtered_items = []
         for item in all_items:
             text = f"{item.headline} {item.summary}"
-            filter_result = self.keyword_filter.filter(text)
+            filter_result = self.keyword_filter.apply(text)
 
-            if filter_result.should_process:
+            if filter_result.passed:
                 item.filter_priority = filter_result.priority
-                item.filter_category = filter_result.category
+                item.filter_category = filter_result.matched_category
                 filtered_items.append(item)
 
         logger.info(f"Filtered to {len(filtered_items)} relevant items")

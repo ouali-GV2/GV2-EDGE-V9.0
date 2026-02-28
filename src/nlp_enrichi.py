@@ -385,7 +385,7 @@ def _call_grok(prompt: str, text: str, temperature: float = 0.1) -> Optional[Dic
 
     try:
         payload = {
-            "model": "grok-3-fast",
+            "model": "grok-4-fast-reasoning",
             "messages": [
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": text}
@@ -472,7 +472,7 @@ def _call_grok_unified(headline: str, body: str) -> Optional[Dict]:
 
     try:
         payload = {
-            "model": "grok-3-fast",
+            "model": "grok-4-fast-reasoning",
             "messages": [
                 {"role": "system", "content": UNIFIED_NLP_PROMPT},
                 {"role": "user", "content": text}

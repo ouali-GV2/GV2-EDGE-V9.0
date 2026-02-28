@@ -19,6 +19,7 @@ Cost optimization:
 """
 
 import os
+import re
 import json
 import hashlib
 import asyncio
@@ -190,7 +191,7 @@ IMPORTANT RULES:
 4. Rumors are TIER 5, confirmed deals are TIER 1-2
 5. If unsure, use BREAKING_POSITIVE or NONE
 
-Respond with JSON only: {"event_type": "...", "confidence": 0.0-1.0, "reasoning": "brief explanation"}
+Respond with JSON only: {{"event_type": "...", "confidence": 0.0-1.0, "reasoning": "brief explanation"}}
 
 NEWS TO CLASSIFY:
 Headline: {headline}
@@ -318,6 +319,7 @@ class NLPClassifier:
         self.client = GROK_CLIENT
         self.cache = ClassificationCache()
         self.semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+        self._quota_exhausted_until = 0.0  # circuit breaker: skip API until this time
 
         if not self.client:
             logger.warning("Grok API not configured - classifier will use fallback")
@@ -350,6 +352,11 @@ class NLPClassifier:
         if not self.client:
             return self._fallback_classify(headline, summary)
 
+        # Circuit breaker: skip API if quota exhausted
+        import time as _time
+        if _time.time() < self._quota_exhausted_until:
+            return self._fallback_classify(headline, summary)
+
         # Call Grok API
         try:
             async with self.semaphore:
@@ -362,8 +369,35 @@ class NLPClassifier:
             return result
 
         except Exception as e:
-            logger.error(f"Grok API error: {e}")
+            import time as _time
+            from openai import RateLimitError
+            if isinstance(e, RateLimitError):
+                self._quota_exhausted_until = _time.time() + 300  # skip for 5 min
+                logger.warning(f"Grok quota exhausted — using fallback for 5 min")
+            else:
+                logger.warning(f"Grok API error [{type(e).__name__}]: {e}")
             return self._fallback_classify(headline, summary)
+
+    @staticmethod
+    def _extract_json(text: str) -> dict:
+        """Extract JSON from response (handles markdown code blocks and reasoning text)"""
+        if not text:
+            return {}
+        # Try direct parse first
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            pass
+        # Extract JSON object from text (handles  or inline JSON)
+        m = re.search(r'\{[^{}]*\}', text, re.DOTALL)
+        if m:
+            try:
+                return json.loads(m.group())
+            except Exception:
+                pass
+        return {}
 
     async def _call_grok(self, headline: str, summary: str) -> ClassificationResult:
         """Make Grok API call"""
@@ -373,16 +407,14 @@ class NLPClassifier:
         )
 
         response = await self.client.chat.completions.create(
-            model="grok-beta",
+            model="grok-4-fast-reasoning",
             messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
-            max_tokens=150,
-            temperature=0.1  # Low temperature for consistency
+            max_tokens=2000,
         )
 
-        # Parse response
-        content = response.choices[0].message.content
-        data = json.loads(content)
+        # Parse response (reasoning models may wrap JSON in text)
+        raw = response.choices[0].message.content or ""
+        data = self._extract_json(raw)
 
         event_type_str = data.get("event_type", "NONE")
 

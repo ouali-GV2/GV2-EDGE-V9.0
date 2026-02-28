@@ -87,7 +87,7 @@ IMPORTANT:
 
 def call_grok(text):
     payload = {
-        "model": "grok-3-fast",
+        "model": "grok-4-fast-reasoning",
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": text}

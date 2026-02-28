@@ -13,6 +13,7 @@ Cache TTL: 15 min. Singleton: get_event_hub()
 
 import json
 import os
+import time
 from datetime import datetime, timedelta, timezone
 
 from utils.cache import Cache
@@ -228,6 +229,14 @@ def build_events(tickers=None, force_refresh=False):
     if cached and not force_refresh:
         return cached
 
+    # Charge le cache fichier si récent (< 15 min) pour éviter les appels Grok inutiles au redémarrage
+    if not force_refresh:
+        file_cached = load_cache_if_fresh(max_age_seconds=900)
+        if file_cached:
+            cache.set("events_v2", file_cached)
+            logger.info(f"Event hub: loaded {len(file_cached)} events from fresh file cache (skipping NLP)")
+            return file_cached
+
     try:
         all_events = []
 
@@ -351,6 +360,21 @@ def load_cache():
             return json.load(f)
 
     return []
+
+
+def load_cache_if_fresh(max_age_seconds=900):
+    """Charge le cache fichier seulement s'il est plus récent que max_age_seconds."""
+    if not os.path.exists(CACHE_FILE):
+        return None
+    age = time.time() - os.path.getmtime(CACHE_FILE)
+    if age > max_age_seconds:
+        return None
+    try:
+        with open(CACHE_FILE) as f:
+            data = json.load(f)
+        return data if data else None
+    except Exception:
+        return None
 
 
 # ============================

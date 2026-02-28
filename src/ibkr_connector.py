@@ -366,8 +366,11 @@ class IBKRConnector:
         while self._heartbeat_running and self.connected:
             try:
                 start = time.time()
-                self.ib.reqCurrentTime()
+                # Use synchronous isConnected() - reqCurrentTime() needs asyncio event loop
+                is_ok = self.ib.isConnected()
                 elapsed_ms = (time.time() - start) * 1000
+                if not is_ok:
+                    raise RuntimeError("ib.isConnected() returned False")
 
                 self._last_heartbeat = time.time()
                 self._heartbeat_latency_ms = elapsed_ms
