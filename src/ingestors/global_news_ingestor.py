@@ -29,7 +29,7 @@ import os
 import asyncio
 import aiohttp
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional, Set
 from dataclasses import dataclass, field
 import json
@@ -207,7 +207,7 @@ class GlobalNewsIngestor:
         logger.info(f"Found {len(hot_tickers)} hot tickers")
 
         return GlobalScanResult(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             items_fetched=len(all_items),
             items_filtered=len(filtered_items),
             hot_tickers=list(hot_tickers),
@@ -249,7 +249,7 @@ class GlobalNewsIngestor:
                 try:
                     published = datetime.fromtimestamp(article.get("datetime", 0))
                 except:
-                    published = datetime.utcnow()
+                    published = datetime.now(timezone.utc)
 
                 items.append(GlobalNewsItem(
                     id=f"finnhub_{news_id}",

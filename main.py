@@ -793,7 +793,7 @@ def process_ibkr_news(headlines: List[Dict]):
 last_audit_day = None
 
 def should_run_weekly_audit():
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     return now.weekday() == 4 and now.hour == 22  # Friday 22h UTC
 
 
@@ -805,7 +805,7 @@ last_universe_rebuild_day = None
 
 def should_rebuild_universe():
     """Rebuild universe every Sunday at 02:00 UTC (before watch list at 03:00)"""
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     return now.weekday() == 6 and now.hour == 2  # Sunday 02h UTC
 
 
@@ -817,7 +817,7 @@ last_daily_audit_day = None
 
 def should_run_daily_audit():
     """Run daily audit at 20:30 UTC (after US market close)"""
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     return now.hour == 20 and now.minute >= 30
 
 
@@ -829,7 +829,7 @@ last_watch_list_day = None
 
 def should_generate_watch_list():
     """Generate watch list once per day at 3 AM UTC (before PM)"""
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     return now.hour == 3  # 3 AM UTC
 
 
@@ -839,7 +839,7 @@ def generate_and_send_watch_list():
     """
     global last_watch_list_day
 
-    now_date = datetime.datetime.utcnow().date()
+    now_date = datetime.datetime.now(datetime.timezone.utc).date()
 
     if now_date == last_watch_list_day:
         return
@@ -992,7 +992,7 @@ def run_edge():
 
     while True:
         try:
-            now = datetime.datetime.utcnow().date()
+            now = datetime.datetime.now(datetime.timezone.utc).date()
 
             # ---- Weekly Universe Rebuild (Sunday 02:00 UTC) ----
             if should_rebuild_universe() and now != last_universe_rebuild_day:

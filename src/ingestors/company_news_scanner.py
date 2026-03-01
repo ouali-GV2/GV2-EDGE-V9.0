@@ -30,7 +30,7 @@ import os
 import asyncio
 import aiohttp
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional, Set
 from dataclasses import dataclass, field
 from enum import Enum
@@ -151,13 +151,13 @@ class CompanyNewsScanner:
 
     async def _rate_limit(self):
         """Apply rate limiting"""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         elapsed = (now - self.last_request_time).total_seconds() * 1000
 
         if elapsed < REQUEST_DELAY_MS:
             await asyncio.sleep((REQUEST_DELAY_MS - elapsed) / 1000)
 
-        self.last_request_time = datetime.utcnow()
+        self.last_request_time = datetime.now(timezone.utc)
 
     def _get_recency_hours(self, priority: ScanPriority) -> int:
         """Get recency threshold based on priority"""
@@ -193,7 +193,7 @@ class CompanyNewsScanner:
         if not news_items:
             return CompanyScanResult(
                 ticker=ticker,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 priority=priority,
                 news_count=0,
                 catalyst_count=0,
@@ -241,11 +241,11 @@ class CompanyNewsScanner:
         top_catalyst = catalysts[0] if catalysts else None
 
         # Update last scan time
-        self.last_scan[ticker] = datetime.utcnow()
+        self.last_scan[ticker] = datetime.now(timezone.utc)
 
         return CompanyScanResult(
             ticker=ticker,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             priority=priority,
             news_count=len(news_items),
             catalyst_count=len(catalysts),
@@ -271,7 +271,7 @@ class CompanyNewsScanner:
 
                 # Date range based on priority
                 recency_hours = self._get_recency_hours(priority)
-                to_date = datetime.utcnow()
+                to_date = datetime.now(timezone.utc)
                 from_date = to_date - timedelta(hours=recency_hours)
 
                 params = {
@@ -293,7 +293,7 @@ class CompanyNewsScanner:
                     data = await resp.json()
 
             items = []
-            cutoff = datetime.utcnow() - timedelta(hours=recency_hours)
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=recency_hours)
 
             for article in data:
                 # Parse datetime
@@ -371,7 +371,7 @@ class CompanyNewsScanner:
             ScanPriority.NORMAL: 600  # 10 min
         }
 
-        elapsed = (datetime.utcnow() - last).total_seconds()
+        elapsed = (datetime.now(timezone.utc) - last).total_seconds()
         return elapsed >= intervals[priority]
 
 

@@ -33,7 +33,7 @@ Workaround:
 
 import time
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from collections import defaultdict
@@ -290,7 +290,7 @@ def detect_options_signals(ticker: str, summary: Dict) -> List[OptionsFlowSignal
     if not summary:
         return signals
 
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
 
     # Get key metrics
     call_volume = summary.get('call_volume', 0)

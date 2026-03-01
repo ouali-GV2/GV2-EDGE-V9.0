@@ -25,7 +25,7 @@ Usage:
 """
 
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
@@ -179,7 +179,7 @@ class ExtendedHoursScanner:
                 rth_open=rth_open,
                 gap_pct=round(gap_pct, 4),
                 change_pct=round(change_pct, 4),
-                timestamp=datetime.utcnow().isoformat(),
+                timestamp=datetime.now(timezone.utc).isoformat(),
                 is_halted=ticker_data.halted if hasattr(ticker_data, 'halted') else False
             )
             
@@ -226,7 +226,7 @@ class ExtendedHoursScanner:
                         rth_open=quote.get('open', 0),
                         gap_pct=round(gap_pct, 4),
                         change_pct=round(gap_pct, 4),
-                        timestamp=datetime.utcnow().isoformat()
+                        timestamp=datetime.now(timezone.utc).isoformat()
                     )
             except Exception as e:
                 logger.debug(f"IBKR fallback error {ticker}: {e}")
@@ -256,7 +256,7 @@ class ExtendedHoursScanner:
                     rth_open=0.0,
                     gap_pct=0.0,       # prev_close unknown without IBKR
                     change_pct=0.0,
-                    timestamp=datetime.utcnow().isoformat(),
+                    timestamp=datetime.now(timezone.utc).isoformat(),
                 )
         except Exception as _ws_e:
             logger.debug(f"Finnhub WS fallback error {ticker}: {_ws_e}")

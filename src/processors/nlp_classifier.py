@@ -24,7 +24,7 @@ import json
 import hashlib
 import asyncio
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, asdict
 from enum import Enum
@@ -258,7 +258,7 @@ class ClassificationCache:
         if row:
             # Check if expired (1 hour TTL)
             created = datetime.fromisoformat(row[5])
-            if datetime.utcnow() - created < timedelta(hours=1):
+            if datetime.now(timezone.utc) - created < timedelta(hours=1):
                 return ClassificationResult(
                     event_type=row[0],
                     impact=row[1],
@@ -284,13 +284,13 @@ class ClassificationCache:
             result.tier,
             result.confidence,
             result.reasoning,
-            datetime.utcnow().isoformat()
+            datetime.now(timezone.utc).isoformat()
         ))
         self.conn.commit()
 
     def clear_expired(self):
         """Clear expired cache entries"""
-        cutoff = (datetime.utcnow() - timedelta(hours=1)).isoformat()
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
         self.conn.execute(
             "DELETE FROM classification_cache WHERE created_at < ?",
             (cutoff,)

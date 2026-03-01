@@ -37,7 +37,7 @@ import os
 import json
 import time
 import concurrent.futures
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass, asdict
 from enum import Enum
@@ -46,7 +46,7 @@ import threading
 from utils.logger import get_logger
 from utils.cache import Cache
 from utils.time_utils import is_after_hours, is_premarket, is_market_open
-from utils.api_guard import safe_get, safe_post
+from utils.api_guard import safe_get, safe_post, pool_safe_get
 
 from config import (
     GROK_API_KEY,
@@ -142,14 +142,14 @@ class AnticipationState:
     
     def can_call_grok(self) -> bool:
         """Check Grok rate limit"""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         hour_ago = now - timedelta(hours=1)
         self.grok_calls = [t for t in self.grok_calls if t > hour_ago]
         return len(self.grok_calls) < self.GROK_CALLS_PER_HOUR
     
     def record_grok_call(self):
         """Record a Grok API call"""
-        self.grok_calls.append(datetime.utcnow())
+        self.grok_calls.append(datetime.now(timezone.utc))
     
     def add_suspects(self, tickers: List[str]):
         """Add tickers to suspects list (thread-safe)"""
@@ -228,7 +228,7 @@ def run_ibkr_radar(tickers: List[str]) -> List[Anomaly]:
     
     logger.info(f"📊 IBKR RADAR: Found {len(anomalies)} anomalies, {len(suspects)} suspects")
     
-    _state.last_radar_scan = datetime.utcnow()
+    _state.last_radar_scan = datetime.now(timezone.utc)
     
     return anomalies
 
@@ -270,8 +270,8 @@ def _scan_with_finnhub(tickers: List[str]) -> List[Anomaly]:
         try:
             url = "https://finnhub.io/api/v1/quote"
             params = {"symbol": ticker, "token": FINNHUB_API_KEY}
-            
-            r = safe_get(url, params=params, timeout=5)
+
+            r = pool_safe_get(url, params=params, timeout=5, provider="finnhub", task_type="QUOTE")
             data = r.json()
             
             quote = {
@@ -358,7 +358,7 @@ def _detect_anomaly_from_quote(ticker: str, quote: dict, source: str) -> Optiona
             score=round(min(1.0, score), 3),
             details=details,
             source=source,
-            timestamp=datetime.utcnow().isoformat()
+            timestamp=datetime.now(timezone.utc).isoformat()
         )
     
     return None
@@ -419,7 +419,7 @@ def analyze_with_real_sources(tickers: List[str]) -> List[CatalystEvent]:
                 headline=f"SEC 8-K: {filing.form_type}",
                 summary=filing.summary or "",
                 source="sec_8k",
-                timestamp=filing.filed_date.isoformat() if filing.filed_date else datetime.utcnow().isoformat()
+                timestamp=filing.filed_date.isoformat() if filing.filed_date else datetime.now(timezone.utc).isoformat()
             ))
 
         # 2. Fetch Finnhub company news for each ticker
@@ -455,7 +455,7 @@ def analyze_with_real_sources(tickers: List[str]) -> List[CatalystEvent]:
                     headline=cat.headline,
                     summary=cat.summary[:200] if cat.summary else "",
                     source="finnhub_company",
-                    timestamp=cat.published_at.isoformat() if cat.published_at else datetime.utcnow().isoformat()
+                    timestamp=cat.published_at.isoformat() if cat.published_at else datetime.now(timezone.utc).isoformat()
                 ))
 
     except ImportError as e:
@@ -466,7 +466,7 @@ def analyze_with_real_sources(tickers: List[str]) -> List[CatalystEvent]:
         logger.error(f"V6.1 ingestor error: {e}")
         events = _fallback_finnhub_news(tickers)
 
-    _state.last_grok_scan = datetime.utcnow()
+    _state.last_grok_scan = datetime.now(timezone.utc)
 
     logger.info(f"📊 V6.1 INGESTORS: Found {len(events)} catalysts")
 
@@ -499,12 +499,12 @@ def _fallback_finnhub_news(tickers: List[str]) -> List[CatalystEvent]:
             url = f"https://finnhub.io/api/v1/company-news"
             params = {
                 "symbol": ticker,
-                "from": (datetime.utcnow() - timedelta(days=2)).strftime("%Y-%m-%d"),
-                "to": datetime.utcnow().strftime("%Y-%m-%d"),
+                "from": (datetime.now(timezone.utc) - timedelta(days=2)).strftime("%Y-%m-%d"),
+                "to": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
                 "token": FINNHUB_API_KEY
             }
 
-            r = safe_get(url, params=params, timeout=10)
+            r = pool_safe_get(url, params=params, timeout=10, provider="finnhub", task_type="COMPANY_NEWS")
             news = r.json()
 
             if news and len(news) > 0:
@@ -516,7 +516,7 @@ def _fallback_finnhub_news(tickers: List[str]) -> List[CatalystEvent]:
                     headline=top_news.get("headline", "")[:100],
                     summary=top_news.get("summary", "")[:200],
                     source="finnhub_fallback",
-                    timestamp=datetime.utcnow().isoformat()
+                    timestamp=datetime.now(timezone.utc).isoformat()
                 ))
 
             # S2-2 FIX: Removed time.sleep(0.5) — safe_get() handles rate limiting.
@@ -589,7 +589,7 @@ def generate_signals(
             fundamental_score=fund_score,
             catalyst_type=catalyst.event_type if catalyst else None,
             catalyst_summary=catalyst.summary if catalyst else "",
-            detection_time=datetime.utcnow().isoformat(),
+            detection_time=datetime.now(timezone.utc).isoformat(),
             status="PENDING"
         )
         
@@ -693,7 +693,7 @@ def run_anticipation_scan(universe: List[str], mode: str = "auto") -> Dict:
     
     results = {
         "mode": mode,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "anomalies": [],
         "catalysts": [],
         "new_signals": [],
@@ -790,7 +790,7 @@ def get_all_active_signals() -> List[AnticipationSignal]:
 
 def clear_expired_signals(max_age_hours: int = 24):
     """Remove signals older than max_age_hours"""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     
     for signal in list(_state.watch_early_signals.values()):
         signal_time = datetime.fromisoformat(signal.detection_time)

@@ -36,7 +36,7 @@ import sqlite3
 import os
 import json
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Callable, Any
 from dataclasses import dataclass, asdict
 from enum import Enum
@@ -170,7 +170,7 @@ class PipelineMonitor:
         self._component_health: Dict[str, ComponentHealth] = {}
 
         # Current metrics buffer
-        self._metrics_buffer = PipelineMetrics(timestamp=datetime.utcnow())
+        self._metrics_buffer = PipelineMetrics(timestamp=datetime.now(timezone.utc))
 
         # Alert callbacks
         self._alert_callbacks: List[Callable] = []
@@ -265,7 +265,7 @@ class PipelineMonitor:
 
     async def _check_endpoint(self, name: str, url: str):
         """Check single endpoint health"""
-        start = datetime.utcnow()
+        start = datetime.now(timezone.utc)
 
         # Add API key for Finnhub
         if name == "finnhub" and FINNHUB_API_KEY:
@@ -275,7 +275,7 @@ class PipelineMonitor:
             session = await self._get_session()
 
             async with session.get(url, timeout=10) as resp:
-                latency = (datetime.utcnow() - start).total_seconds() * 1000
+                latency = (datetime.now(timezone.utc) - start).total_seconds() * 1000
 
                 if resp.status == 200:
                     status = HealthStatus.HEALTHY
@@ -288,8 +288,8 @@ class PipelineMonitor:
                     name=name,
                     status=status,
                     latency_ms=latency,
-                    last_check=datetime.utcnow(),
-                    last_success=datetime.utcnow() if status == HealthStatus.HEALTHY else None
+                    last_check=datetime.now(timezone.utc),
+                    last_success=datetime.now(timezone.utc) if status == HealthStatus.HEALTHY else None
                 )
 
         except asyncio.TimeoutError:
@@ -297,7 +297,7 @@ class PipelineMonitor:
                 name=name,
                 status=HealthStatus.DOWN,
                 latency_ms=10000,
-                last_check=datetime.utcnow(),
+                last_check=datetime.now(timezone.utc),
                 error_message="Timeout"
             )
 
@@ -305,7 +305,7 @@ class PipelineMonitor:
             health = ComponentHealth(
                 name=name,
                 status=HealthStatus.DOWN,
-                last_check=datetime.utcnow(),
+                last_check=datetime.now(timezone.utc),
                 error_message=str(e)
             )
 
@@ -338,7 +338,7 @@ class PipelineMonitor:
             (timestamp, component, status, latency_ms, error_message)
             VALUES (?, ?, ?, ?, ?)
         """, (
-            datetime.utcnow().isoformat(),
+            datetime.now(timezone.utc).isoformat(),
             health.name,
             health.status.value,
             health.latency_ms,
@@ -417,7 +417,7 @@ class PipelineMonitor:
         self._alert_counter += 1
         alert = Alert(
             id=f"alert_{self._alert_counter}",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             level=level,
             component=component,
             message=message,
@@ -547,10 +547,10 @@ class PipelineMonitor:
         self.conn.commit()
 
         # Reset buffer
-        self._metrics_buffer = PipelineMetrics(timestamp=datetime.utcnow())
+        self._metrics_buffer = PipelineMetrics(timestamp=datetime.now(timezone.utc))
 
         # Cleanup old data
-        cutoff = (datetime.utcnow() - timedelta(days=METRICS_RETENTION_DAYS)).isoformat()
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=METRICS_RETENTION_DAYS)).isoformat()
         self.conn.execute("DELETE FROM metrics WHERE timestamp < ?", (cutoff,))
         self.conn.execute("DELETE FROM health_history WHERE timestamp < ?", (cutoff,))
         self.conn.commit()
@@ -582,7 +582,7 @@ class PipelineMonitor:
         ]
 
         return {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "overall_status": self._get_overall_status().value,
             "components": health_summary,
             "metrics": {
@@ -612,7 +612,7 @@ class PipelineMonitor:
 
     def get_metrics_history(self, hours: int = 24) -> List[Dict]:
         """Get historical metrics"""
-        cutoff = (datetime.utcnow() - timedelta(hours=hours)).isoformat()
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
 
         cursor = self.conn.cursor()
         cursor.execute("""

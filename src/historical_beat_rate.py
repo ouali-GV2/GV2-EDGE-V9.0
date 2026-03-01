@@ -20,7 +20,7 @@ import numpy as np
 
 from utils.logger import get_logger
 from utils.cache import Cache
-from utils.api_guard import safe_get
+from utils.api_guard import safe_get, pool_safe_get
 
 from config import FINNHUB_API_KEY, USE_IBKR_DATA
 
@@ -58,7 +58,7 @@ def fetch_earnings_history(ticker, quarters=8):
             "token": FINNHUB_API_KEY
         }
         
-        r = safe_get(FINNHUB_EARNINGS_HISTORY, params=params, timeout=10)
+        r = pool_safe_get(FINNHUB_EARNINGS_HISTORY, params=params, timeout=10, provider="finnhub", task_type="EARNINGS_HISTORY")
         data = r.json()
         
         if not data:

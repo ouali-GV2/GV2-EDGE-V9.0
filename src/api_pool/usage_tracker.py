@@ -19,7 +19,7 @@ Architecture:
 """
 
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Deque
 from collections import deque
 from dataclasses import dataclass, field
@@ -176,7 +176,7 @@ class UsageTracker:
             # Update consecutive errors
             if success:
                 self._consecutive_errors[key_id] = 0
-                self._last_success[key_id] = datetime.utcnow()
+                self._last_success[key_id] = datetime.now(timezone.utc)
             else:
                 self._consecutive_errors[key_id] = self._consecutive_errors.get(key_id, 0) + 1
                 self._last_error[key_id] = error_type or "UNKNOWN"
@@ -184,7 +184,7 @@ class UsageTracker:
                 # Track rate limits specifically
                 if error_type == "RATE_LIMIT":
                     self._rate_limits[key_id] = self._rate_limits.get(key_id, 0) + 1
-                    self._last_rate_limit[key_id] = datetime.utcnow()
+                    self._last_rate_limit[key_id] = datetime.now(timezone.utc)
 
     def get_calls_in_window(
         self,

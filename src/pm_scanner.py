@@ -10,7 +10,7 @@ V8 FIXES (from REVIEW):
 """
 
 from utils.logger import get_logger
-from utils.api_guard import safe_get
+from utils.api_guard import safe_get, pool_safe_get
 from utils.cache import Cache
 from utils.time_utils import is_premarket
 
@@ -117,7 +117,7 @@ def fetch_quote(ticker):
         "token": FINNHUB_API_KEY
     }
 
-    r = safe_get(FINNHUB_QUOTE, params=params)
+    r = pool_safe_get(FINNHUB_QUOTE, params=params, provider="finnhub", task_type="QUOTE")
     return r.json()
 
 

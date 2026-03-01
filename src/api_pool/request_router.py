@@ -17,7 +17,7 @@ Architecture:
 - Quota reservation for critical tasks
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
@@ -171,7 +171,7 @@ class RequestRouter:
             if cooldown_keys:
                 # Find shortest cooldown
                 min_cooldown = min(
-                    (k.cooldown_until - datetime.utcnow()).total_seconds()
+                    (k.cooldown_until - datetime.now(timezone.utc)).total_seconds()
                     for k in cooldown_keys if k.cooldown_until
                 )
                 return RoutingResult(

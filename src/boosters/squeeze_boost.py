@@ -35,7 +35,7 @@ Rôle:
 import asyncio
 import aiohttp
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Set
 from dataclasses import dataclass
 from enum import Enum
@@ -176,7 +176,7 @@ class SqueezeBoostEngine:
         # Build result
         result = SqueezeBoostResult(
             ticker=ticker,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             short_data=short_data,
             has_data=short_data is not None
         )
@@ -204,7 +204,7 @@ class SqueezeBoostEngine:
             return None
 
         result = self._cache[ticker]
-        age = (datetime.utcnow() - result.timestamp).total_seconds()
+        age = (datetime.now(timezone.utc) - result.timestamp).total_seconds()
 
         if age > CACHE_TTL:
             del self._cache[ticker]
@@ -222,7 +222,7 @@ class SqueezeBoostEngine:
             session = await self._get_session()
 
             # Date range (last 30 days)
-            to_date = datetime.utcnow()
+            to_date = datetime.now(timezone.utc)
             from_date = to_date - timedelta(days=30)
 
             params = {
@@ -257,7 +257,7 @@ class SqueezeBoostEngine:
 
             return ShortData(
                 ticker=ticker,
-                date=datetime.utcnow(),
+                date=datetime.now(timezone.utc),
                 short_interest=short_interest,
                 avg_volume=avg_volume,
                 days_to_cover=dtc,

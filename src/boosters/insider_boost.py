@@ -29,7 +29,7 @@ Rôle:
 import asyncio
 import concurrent.futures
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Set
 from dataclasses import dataclass
 from enum import Enum
@@ -178,7 +178,7 @@ class InsiderBoostEngine:
         # Build result
         result = InsiderBoostResult(
             ticker=ticker,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             transactions=transactions
         )
 
@@ -204,7 +204,7 @@ class InsiderBoostEngine:
             return None
 
         result = self._cache[ticker]
-        age = (datetime.utcnow() - result.timestamp).total_seconds()
+        age = (datetime.now(timezone.utc) - result.timestamp).total_seconds()
 
         if age > self._cache_ttl:
             del self._cache[ticker]
@@ -294,7 +294,7 @@ class InsiderBoostEngine:
             ]
             if recent_buys:
                 most_recent = max(recent_buys, key=lambda x: x.transaction_date)
-                age_hours = (datetime.utcnow() - most_recent.transaction_date).total_seconds() / 3600
+                age_hours = (datetime.now(timezone.utc) - most_recent.transaction_date).total_seconds() / 3600
 
                 decay = 1.0
                 for threshold, factor in sorted(TIME_DECAY.items()):

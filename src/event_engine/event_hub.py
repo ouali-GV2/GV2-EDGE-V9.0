@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 
 from utils.cache import Cache
 from utils.logger import get_logger
-from utils.api_guard import safe_get
+from utils.api_guard import safe_get, pool_safe_get
 from utils.data_validator import validate_event
 
 from src.event_engine.nlp_event_parser import parse_many_texts
@@ -69,7 +69,7 @@ def fetch_company_news(ticker, days_back=3):
     }
 
     try:
-        r = safe_get(FINNHUB_COMPANY_NEWS, params=params, timeout=5)
+        r = pool_safe_get(FINNHUB_COMPANY_NEWS, params=params, timeout=5, provider="finnhub", task_type="COMPANY_NEWS")
         data = r.json()
 
         events = []
@@ -114,7 +114,7 @@ def fetch_earnings_events(days_forward=7):
     }
 
     try:
-        r = safe_get(FINNHUB_EARNINGS, params=params, timeout=10)
+        r = pool_safe_get(FINNHUB_EARNINGS, params=params, timeout=10, provider="finnhub", task_type="EARNINGS_CALENDAR")
         data = r.json()
 
         events = []
@@ -164,7 +164,7 @@ def fetch_breaking_news(category="general"):
     }
 
     try:
-        r = safe_get(FINNHUB_GENERAL_NEWS, params=params, timeout=10)
+        r = pool_safe_get(FINNHUB_GENERAL_NEWS, params=params, timeout=10, provider="finnhub", task_type="GENERAL_NEWS")
         data = r.json()
 
         texts = []

@@ -26,6 +26,7 @@ from typing import Dict, List, Optional, Tuple
 
 from utils.logger import get_logger
 from utils.cache import TTLCache
+from utils.api_guard import safe_get, pool_safe_get
 
 logger = get_logger("FLOAT_ANALYSIS")
 
@@ -234,12 +235,10 @@ class FloatAnalyzer:
             if not FINNHUB_API_KEY:
                 return 0, 0
 
-            import requests
-
             url = f"https://finnhub.io/api/v1/stock/profile2"
             params = {"symbol": ticker, "token": FINNHUB_API_KEY}
 
-            resp = requests.get(url, params=params, timeout=10)
+            resp = pool_safe_get(url, params=params, timeout=10, provider="finnhub", task_type="PROFILE")
             if resp.status_code != 200:
                 return 0, 0
 
@@ -265,12 +264,10 @@ class FloatAnalyzer:
         try:
             from config import FINNHUB_API_KEY
             if FINNHUB_API_KEY:
-                import requests
-
                 url = f"https://finnhub.io/api/v1/stock/short-interest"
                 params = {"symbol": ticker, "token": FINNHUB_API_KEY}
 
-                resp = requests.get(url, params=params, timeout=10)
+                resp = pool_safe_get(url, params=params, timeout=10, provider="finnhub", task_type="SHORT_INTEREST")
                 if resp.status_code == 200:
                     data = resp.json()
                     if data.get("data"):

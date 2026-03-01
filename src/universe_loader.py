@@ -28,7 +28,7 @@ import re
 import pandas as pd
 
 from config import FINNHUB_API_KEY
-from utils.api_guard import safe_get
+from utils.api_guard import safe_get, pool_safe_get
 from utils.cache import Cache
 from utils.logger import get_logger
 
@@ -85,7 +85,7 @@ def fetch_finnhub_symbols():
         "token": FINNHUB_API_KEY
     }
 
-    r = safe_get(url, params=params, timeout=15)
+    r = pool_safe_get(url, params=params, timeout=15, provider="finnhub", task_type="UNIVERSE")
     data = r.json()
 
     df = pd.DataFrame(data)

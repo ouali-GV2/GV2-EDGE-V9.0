@@ -1,11 +1,85 @@
 import time
 import requests
 from functools import wraps
+from urllib.parse import urlparse
 
 from utils.logger import get_logger
 
 logger = get_logger("API_GUARD")
+api_log = get_logger("API_MONITOR")   # → data/logs/api_monitor.log
 
+
+# ============================
+# HELPERS
+# ============================
+
+def _short_url(url: str) -> str:
+    """Return domain+path only — no query params (hides API keys)."""
+    try:
+        p = urlparse(url)
+        return f"{p.netloc}{p.path}"
+    except Exception:
+        return url[:80]
+
+
+def _infer_provider(url: str) -> str:
+    """Infer provider name from URL."""
+    u = url.lower()
+    if "finnhub" in u:    return "finnhub"
+    if "sec.gov" in u:    return "sec"
+    if "x.ai" in u or "grok" in u: return "grok"
+    if "reddit" in u:     return "reddit"
+    if "stocktwits" in u: return "stocktwits"
+    if "yahoo" in u:      return "yahoo"
+    if "ibkr" in u or "interactivebrokers" in u: return "ibkr"
+    return "http"
+
+
+def _log_api(method: str, url: str, status: int, latency_ms: float,
+             provider: str = "", key_id: str = "", error: str = "", note: str = ""):
+    """
+    Write one structured line to api_monitor.log.
+
+    Format:
+      METHOD | PROVIDER | endpoint | STATUS_TAG | 42ms [| key=XX] [| note]
+    """
+    endpoint = _short_url(url)
+    prov = provider or _infer_provider(url)
+
+    if error:
+        tag = f"ERR={error[:60]}"
+    elif status == 429:
+        tag = "RATE_LIMIT(429)"
+    elif status == 403:
+        tag = "FORBIDDEN(403)"
+    elif status >= 500:
+        tag = f"SERVER_ERR({status})"
+    elif status >= 400:
+        tag = f"CLIENT_ERR({status})"
+    elif status == 0:
+        tag = "TIMEOUT/CONN"
+    else:
+        tag = f"OK({status})"
+
+    parts = [method, prov, endpoint, tag, f"{latency_ms:.0f}ms"]
+    if key_id:
+        parts.append(f"key={key_id}")
+    if note:
+        parts.append(note)
+
+    msg = " | ".join(parts)
+
+    if error or status >= 500:
+        api_log.error(msg)
+    elif status in (429, 403) or (status >= 400 and status != 200):
+        api_log.warning(msg)
+    else:
+        api_log.info(msg)
+
+
+# ============================
+# DECORATOR
+# ============================
 
 class APIGuardException(Exception):
     pass
@@ -18,11 +92,9 @@ def safe_api_call(
     allowed_exceptions=(requests.exceptions.RequestException,)
 ):
     """
-    Decorator for safe API calls with retry + exponential backoff
+    Decorator for safe API calls with retry + exponential backoff.
     """
-
     def decorator(func):
-
         @wraps(func)
         def wrapper(*args, **kwargs):
             attempt = 0
@@ -35,22 +107,19 @@ def safe_api_call(
                 except allowed_exceptions as e:
                     attempt += 1
                     logger.warning(
-                        f"API error on {func.__name__} attempt {attempt}/{retries} : {e}"
+                        f"API error on {func.__name__} attempt {attempt}/{retries}: {e}"
                     )
-
                     if attempt >= retries:
                         logger.error(f"API failed permanently: {func.__name__}")
                         raise APIGuardException(str(e))
-
                     time.sleep(wait)
                     wait *= backoff
 
                 except Exception as e:
-                    logger.error(f"Unexpected error in API call {func.__name__}: {e}")
+                    logger.error(f"Unexpected error in {func.__name__}: {e}")
                     raise
 
         return wrapper
-
     return decorator
 
 
@@ -60,12 +129,30 @@ def safe_api_call(
 
 @safe_api_call()
 def safe_get(url, params=None, headers=None, timeout=10):
-    return requests.get(url, params=params, headers=headers, timeout=timeout)
+    t0 = time.time()
+    try:
+        r = requests.get(url, params=params, headers=headers, timeout=timeout)
+        latency = (time.time() - t0) * 1000
+        _log_api("GET", url, r.status_code, latency)
+        return r
+    except Exception as e:
+        latency = (time.time() - t0) * 1000
+        _log_api("GET", url, 0, latency, error=str(e)[:80])
+        raise
 
 
 @safe_api_call()
 def safe_post(url, json=None, headers=None, timeout=10):
-    return requests.post(url, json=json, headers=headers, timeout=timeout)
+    t0 = time.time()
+    try:
+        r = requests.post(url, json=json, headers=headers, timeout=timeout)
+        latency = (time.time() - t0) * 1000
+        _log_api("POST", url, r.status_code, latency)
+        return r
+    except Exception as e:
+        latency = (time.time() - t0) * 1000
+        _log_api("POST", url, 0, latency, error=str(e)[:80])
+        raise
 
 
 # ============================
@@ -123,6 +210,9 @@ def pool_safe_get(
             logger.warning(
                 f"Pool: no key available for {provider}/{task_type} (attempt {attempt + 1})"
             )
+            api_log.warning(
+                f"GET | {provider} | {_short_url(url)} | NO_KEY | 0ms | attempt={attempt+1}"
+            )
             break
 
         merged_params = dict(params or {})
@@ -143,14 +233,20 @@ def pool_safe_get(
                     f"Pool: 429 on {acq.key_id} for {provider}/{task_type}"
                     f" — switching key (attempt {attempt + 1}/{max_switches})"
                 )
+                _log_api("GET", url, 429, latency_ms, provider=provider,
+                         key_id=acq.key_id, note=f"key_switch {attempt+1}/{max_switches}")
                 pool.release(acq.key_id, success=False, latency_ms=latency_ms, error="RATE_LIMIT")
                 continue  # No sleep — immediate retry with next key
 
+            _log_api("GET", url, r.status_code, latency_ms,
+                     provider=provider, key_id=acq.key_id)
             pool.release(acq.key_id, success=True, latency_ms=latency_ms)
             return r
 
         except requests.exceptions.RequestException as e:
             latency_ms = (time.time() - t0) * 1000
+            _log_api("GET", url, 0, latency_ms, provider=provider,
+                     key_id=acq.key_id, error=str(e)[:80])
             pool.release(acq.key_id, success=False, latency_ms=latency_ms, error=str(e)[:100])
             raise
 
@@ -158,6 +254,9 @@ def pool_safe_get(
     logger.warning(
         f"Pool: all {max_switches} key attempts exhausted for {provider}"
         f" — fallback to default key"
+    )
+    api_log.warning(
+        f"GET | {provider} | {_short_url(url)} | POOL_EXHAUSTED | 0ms | fallback"
     )
     return safe_get(url, params=params, headers=headers, timeout=timeout)
 
@@ -210,6 +309,9 @@ def pool_safe_post(
             logger.warning(
                 f"Pool: no key available for {provider}/{task_type} (attempt {attempt + 1})"
             )
+            api_log.warning(
+                f"POST | {provider} | {_short_url(url)} | NO_KEY | 0ms | attempt={attempt+1}"
+            )
             break
 
         merged_headers = dict(headers or {})
@@ -229,14 +331,20 @@ def pool_safe_post(
                     f"Pool: 429 on {acq.key_id} for {provider}/{task_type}"
                     f" — switching key (attempt {attempt + 1}/{max_switches})"
                 )
+                _log_api("POST", url, 429, latency_ms, provider=provider,
+                         key_id=acq.key_id, note=f"key_switch {attempt+1}/{max_switches}")
                 pool.release(acq.key_id, success=False, latency_ms=latency_ms, error="RATE_LIMIT")
                 continue  # No sleep — immediate retry with next key
 
+            _log_api("POST", url, r.status_code, latency_ms,
+                     provider=provider, key_id=acq.key_id)
             pool.release(acq.key_id, success=True, latency_ms=latency_ms)
             return r
 
         except requests.exceptions.RequestException as e:
             latency_ms = (time.time() - t0) * 1000
+            _log_api("POST", url, 0, latency_ms, provider=provider,
+                     key_id=acq.key_id, error=str(e)[:80])
             pool.release(acq.key_id, success=False, latency_ms=latency_ms, error=str(e)[:100])
             raise
 
@@ -244,5 +352,8 @@ def pool_safe_post(
     logger.warning(
         f"Pool: all {max_switches} key attempts exhausted for {provider}"
         f" — fallback to default key"
+    )
+    api_log.warning(
+        f"POST | {provider} | {_short_url(url)} | POOL_EXHAUSTED | 0ms | fallback"
     )
     return safe_post(url, json=json, headers=headers, timeout=timeout)

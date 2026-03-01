@@ -26,7 +26,7 @@ IMPORTANT V6.1:
 import re
 import json
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass, asdict
 from collections import defaultdict
@@ -231,7 +231,7 @@ async def classify_events_v6(news_items: List[Dict], universe_tickers: Set[str])
                 impact_score=result.impact,
                 sentiment="BULLISH" if result.impact >= 0.5 else "NEUTRAL",
                 source=item.get('source', 'unknown'),
-                published_at=item.get('published', datetime.utcnow().isoformat()),
+                published_at=item.get('published', datetime.now(timezone.utc).isoformat()),
                 url=item.get('url'),
                 tier=result.tier
             )

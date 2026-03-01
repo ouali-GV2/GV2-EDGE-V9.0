@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Set
 
 from config import GROK_API_KEY
-from utils.api_guard import safe_post
+from utils.api_guard import safe_post, pool_safe_post
 from utils.logger import get_logger
 
 logger = get_logger("NLP_ENRICHI")
@@ -385,7 +385,7 @@ def _call_grok(prompt: str, text: str, temperature: float = 0.1) -> Optional[Dic
 
     try:
         payload = {
-            "model": "grok-4-fast-reasoning",
+            "model": "grok-3-fast",
             "messages": [
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": text}
@@ -398,7 +398,10 @@ def _call_grok(prompt: str, text: str, temperature: float = 0.1) -> Optional[Dic
             "Content-Type": "application/json"
         }
 
-        response = safe_post(GROK_ENDPOINT, json=payload, headers=headers)
+        response = pool_safe_post(
+            GROK_ENDPOINT, json=payload, headers=headers,
+            provider="grok", task_type="NLP_CLASSIFY",
+        )
         if response.status_code != 200:
             logger.warning(f"Grok API HTTP {response.status_code}: {response.text[:200]}")
             return None

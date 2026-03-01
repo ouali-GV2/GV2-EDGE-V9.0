@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 
 from config import GROK_API_KEY
-from utils.api_guard import safe_post
+from utils.api_guard import safe_post, pool_safe_post
 from utils.logger import get_logger
 from utils.data_validator import validate_event
 
@@ -87,7 +87,7 @@ IMPORTANT:
 
 def call_grok(text):
     payload = {
-        "model": "grok-4-fast-reasoning",
+        "model": "grok-3-fast",
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": text}
@@ -100,7 +100,10 @@ def call_grok(text):
         "Content-Type": "application/json"
     }
 
-    r = safe_post(GROK_ENDPOINT, json=payload, headers=headers)
+    r = pool_safe_post(
+        GROK_ENDPOINT, json=payload, headers=headers,
+        provider="grok", task_type="NLP_CLASSIFY",
+    )
     # S4-5 FIX: check HTTP status before parsing to avoid confusing error messages
     if r.status_code != 200:
         logger.warning(f"Grok API returned HTTP {r.status_code}: {r.text[:200]}")

@@ -30,7 +30,7 @@ import asyncio
 import aiohttp
 import sqlite3
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Set
 from dataclasses import dataclass
 
@@ -131,7 +131,7 @@ class BaselineTracker:
     def get_baseline(self, ticker: str) -> float:
         """Get 7-day average daily mentions"""
         ticker = ticker.upper()
-        cutoff = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
 
         cursor = self.conn.cursor()
         cursor.execute("""
@@ -145,7 +145,7 @@ class BaselineTracker:
     def update_baseline(self, ticker: str, mention_count: int):
         """Update today's baseline"""
         ticker = ticker.upper()
-        today = datetime.utcnow().strftime("%Y-%m-%d")
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
         self.conn.execute("""
             INSERT OR REPLACE INTO buzz_baseline (ticker, date, mention_count)
@@ -287,7 +287,7 @@ class SocialBuzzEngine:
         bullish = 0
         bearish = 0
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         cutoff_1h = now - timedelta(hours=1)
         cutoff_24h = now - timedelta(hours=24)
 
@@ -353,7 +353,7 @@ class SocialBuzzEngine:
 
         messages = data.get("messages", [])
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         mentions_1h = 0
         mentions_24h = 0
         bullish = 0
@@ -440,7 +440,7 @@ class SocialBuzzEngine:
 
         return BuzzMetrics(
             ticker=ticker,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             mention_count_1h=mention_1h,
             mention_count_24h=mention_24h,
             reddit_mentions=reddit_data["mentions_24h"],

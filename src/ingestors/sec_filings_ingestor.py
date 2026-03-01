@@ -22,7 +22,7 @@ import asyncio
 import aiohttp
 import feedparser
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, asdict
 from xml.etree import ElementTree as ET
@@ -178,7 +178,7 @@ class CIKMapper:
                     cursor.execute("""
                         INSERT OR REPLACE INTO cik_mapping (cik, ticker, company_name, updated_at)
                         VALUES (?, ?, ?, ?)
-                    """, (cik, ticker, name, datetime.utcnow().isoformat()))
+                    """, (cik, ticker, name, datetime.now(timezone.utc).isoformat()))
                 self.conn.commit()
                 logger.info(f"Loaded {len(data)} CIK mappings from SEC")
         except Exception as e:
@@ -300,7 +300,7 @@ class SEC8KIngestor:
             List of SECFiling objects
         """
         filings = []
-        cutoff = datetime.utcnow() - timedelta(hours=hours_back)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours_back)
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -376,7 +376,7 @@ class SEC8KIngestor:
             try:
                 filed_date = datetime.fromisoformat(updated.replace("Z", "+00:00")).replace(tzinfo=None)
             except:
-                filed_date = datetime.utcnow()
+                filed_date = datetime.now(timezone.utc)
 
             # Extract items from summary (if available)
             summary = entry.get("summary", "")
@@ -551,7 +551,7 @@ class SECForm4Ingestor:
             return []
 
         transactions = []
-        cutoff = datetime.utcnow() - timedelta(days=days_back)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
 
         try:
             url = SEC_COMPANY_SEARCH.format(cik=cik, form_type="4", count=40)
@@ -678,7 +678,7 @@ class SECForm4Ingestor:
                         insider_title = "Director"
 
             # First non-derivative transaction
-            txn_date = datetime.utcnow()
+            txn_date = datetime.now(timezone.utc)
             transaction_code = ""
             shares = 0
             price = 0.0

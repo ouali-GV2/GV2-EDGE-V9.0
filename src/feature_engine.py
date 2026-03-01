@@ -2,11 +2,11 @@ import asyncio
 import concurrent.futures
 import threading
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timezone
 from utils.cache import Cache
 from utils.logger import get_logger
 from utils.data_validator import validate_features
-from utils.api_guard import safe_get
+from utils.api_guard import safe_get, pool_safe_get
 from config import FINNHUB_API_KEY, USE_IBKR_DATA
 
 logger = get_logger("FEATURE_ENGINE")
@@ -101,7 +101,7 @@ def fetch_candles(ticker, resolution="1", lookback=120):
     
     # Fallback to Finnhub
     try:
-        now = int(datetime.utcnow().timestamp())
+        now = int(datetime.now(timezone.utc).timestamp())
         start = now - lookback * 60
 
         params = {
@@ -112,7 +112,7 @@ def fetch_candles(ticker, resolution="1", lookback=120):
             "token": FINNHUB_API_KEY
         }
 
-        r = safe_get(FINNHUB_CANDLE, params=params)
+        r = pool_safe_get(FINNHUB_CANDLE, params=params, provider="finnhub", task_type="CANDLES")
         data = r.json()
 
         if data.get("s") != "ok":

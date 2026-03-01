@@ -25,7 +25,7 @@ Architecture:
 import os
 import sqlite3
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Set
 from dataclasses import dataclass, field, asdict
 from enum import Enum
@@ -130,7 +130,7 @@ class APIKeyConfig:
             return False
         if self.status in [KeyStatus.DISABLED, KeyStatus.ERROR]:
             return False
-        if self.cooldown_until and datetime.utcnow() < self.cooldown_until:
+        if self.cooldown_until and datetime.now(timezone.utc) < self.cooldown_until:
             return False
         return True
 
@@ -316,7 +316,7 @@ class KeyRegistry:
             return
 
         key = self._keys[key_id]
-        key.cooldown_until = datetime.utcnow() + timedelta(seconds=seconds)
+        key.cooldown_until = datetime.now(timezone.utc) + timedelta(seconds=seconds)
         key.status = KeyStatus.COOLDOWN
 
         self._save_state(key_id)
@@ -373,7 +373,7 @@ class KeyRegistry:
             key.status.value,
             key.cooldown_until.isoformat() if key.cooldown_until else None,
             error,
-            datetime.utcnow().isoformat()
+            datetime.now(timezone.utc).isoformat()
         ))
         self.conn.commit()
 

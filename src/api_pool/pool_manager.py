@@ -31,7 +31,7 @@ Features:
 import asyncio
 import time
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional, Any
 from dataclasses import dataclass
 from contextlib import asynccontextmanager
@@ -87,7 +87,7 @@ class KeyAcquisition:
 
     def __post_init__(self):
         if self.acquired_at is None:
-            self.acquired_at = datetime.utcnow()
+            self.acquired_at = datetime.now(timezone.utc)
 
 
 # ============================================================================
@@ -195,7 +195,7 @@ class APIPoolManager:
             )
 
         # Track acquisition
-        self._active_acquisitions[result.key_id] = datetime.utcnow()
+        self._active_acquisitions[result.key_id] = datetime.now(timezone.utc)
 
         return KeyAcquisition(
             success=True,

@@ -31,7 +31,7 @@ import asyncio
 import json
 import time
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Callable, Set
 from dataclasses import dataclass, field
 
@@ -83,7 +83,7 @@ class TickerTradeState:
 
     def add_trade(self, price: float, volume: float, timestamp: float):
         """Add a trade and update rolling state."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         trade = {"price": price, "volume": volume, "ts": timestamp}
         self.trades.append(trade)
 
@@ -240,7 +240,7 @@ class FinnhubWSScreener:
             return
 
         self._running = True
-        self._start_time = datetime.utcnow()
+        self._start_time = datetime.now(timezone.utc)
         attempt = 0
 
         logger.info(f"Starting Finnhub WS Screener for {len(tickers)} tickers")
@@ -303,7 +303,7 @@ class FinnhubWSScreener:
     def get_active_spikes(self) -> List[WSScreenerEvent]:
         """Get all tickers currently showing volume spikes."""
         events = []
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         for ticker, state in self._states.items():
             if state.volume_ratio >= VOLUME_SPIKE_THRESHOLD:
@@ -323,7 +323,7 @@ class FinnhubWSScreener:
         """Get screener statistics."""
         uptime = 0
         if self._start_time:
-            uptime = (datetime.utcnow() - self._start_time).total_seconds()
+            uptime = (datetime.now(timezone.utc) - self._start_time).total_seconds()
 
         return {
             "connected": self._connected,
@@ -428,7 +428,7 @@ class FinnhubWSScreener:
 
     def _check_events(self, state: TickerTradeState) -> None:
         """Check if a ticker state triggers any events."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # Volume spike
         if state.volume_ratio >= VOLUME_SPIKE_THRESHOLD:
