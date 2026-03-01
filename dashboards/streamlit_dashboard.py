@@ -796,14 +796,9 @@ with tab3:
         if st.button("🔄 Refresh", key="refresh_events", help="Re-fetch events from all sources"):
             try:
                 from src.event_engine.event_hub import refresh_events
-                from src.universe_loader import get_universe
+                from src.universe_loader import get_tickers
                 with st.spinner("Fetching events…"):
-                    raw_universe = get_universe() or []
-                    tickers = [
-                        (t.get("ticker") or t.get("symbol") if isinstance(t, dict) else t)
-                        for t in raw_universe
-                    ]
-                    tickers = [t for t in tickers if t][:150]
+                    tickers = (get_tickers(limit=150) or [])
                     refresh_events(tickers=tickers or None)
                 st.cache_data.clear()
                 st.success(f"Events refreshed! ({len(tickers)} tickers)")
