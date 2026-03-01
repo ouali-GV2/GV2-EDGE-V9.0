@@ -1,4 +1,6 @@
 import time
+import threading
+import collections
 import requests
 from functools import wraps
 from urllib.parse import urlparse
@@ -7,6 +9,35 @@ from utils.logger import get_logger
 
 logger = get_logger("API_GUARD")
 api_log = get_logger("API_MONITOR")   # → data/logs/api_monitor.log
+
+# ============================
+# Grok token bucket (8 req/min — Grok free tier = 10/min)
+# ============================
+_grok_tb_lock = threading.Lock()
+_grok_tb_timestamps: collections.deque = collections.deque()
+_GROK_TB_MAX    = 8     # max requests per window
+_GROK_TB_WINDOW = 60.0  # sliding window in seconds
+
+
+def _grok_token_bucket_wait(timeout: float = 70.0) -> bool:
+    """
+    Block until a Grok API slot is available (max `timeout` seconds).
+    Returns True if a slot was acquired, False if timeout expired.
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        with _grok_tb_lock:
+            now = time.time()
+            # Evict timestamps outside the sliding window
+            while _grok_tb_timestamps and _grok_tb_timestamps[0] < now - _GROK_TB_WINDOW:
+                _grok_tb_timestamps.popleft()
+            if len(_grok_tb_timestamps) < _GROK_TB_MAX:
+                _grok_tb_timestamps.append(now)
+                return True
+            # Calculate wait until oldest slot expires
+            wait = _GROK_TB_WINDOW - (now - _grok_tb_timestamps[0]) + 0.05
+        time.sleep(min(wait, 1.0))
+    return False
 
 
 # ============================
@@ -238,6 +269,11 @@ def pool_safe_get(
                 pool.release(acq.key_id, success=False, latency_ms=latency_ms, error="RATE_LIMIT")
                 continue  # No sleep — immediate retry with next key
 
+            if r.status_code == 403:
+                _log_api("GET", url, 403, latency_ms, provider=provider, key_id=acq.key_id)
+                pool.release(acq.key_id, success=False, latency_ms=latency_ms, error="FORBIDDEN")
+                break  # 403 = permanent for this key — no retry
+
             _log_api("GET", url, r.status_code, latency_ms,
                      provider=provider, key_id=acq.key_id)
             pool.release(acq.key_id, success=True, latency_ms=latency_ms)
@@ -302,6 +338,14 @@ def pool_safe_post(
         from src.api_pool.request_router import Priority as P
         priority = P.STANDARD
 
+    # Grok token bucket — enforce 8 req/min before attempting any key
+    if provider in ("grok", "xai"):
+        if not _grok_token_bucket_wait(timeout=70.0):
+            api_log.warning(
+                f"POST | {provider} | {_short_url(url)} | TOKEN_BUCKET_TIMEOUT | 0ms"
+            )
+            return safe_post(url, json=json, headers=headers, timeout=timeout)
+
     for attempt in range(max_switches):
         acq = pool.get_key(provider, task_type, priority)
 
@@ -335,6 +379,11 @@ def pool_safe_post(
                          key_id=acq.key_id, note=f"key_switch {attempt+1}/{max_switches}")
                 pool.release(acq.key_id, success=False, latency_ms=latency_ms, error="RATE_LIMIT")
                 continue  # No sleep — immediate retry with next key
+
+            if r.status_code == 403:
+                _log_api("POST", url, 403, latency_ms, provider=provider, key_id=acq.key_id)
+                pool.release(acq.key_id, success=False, latency_ms=latency_ms, error="FORBIDDEN")
+                break  # 403 = permanent for this key — no retry
 
             _log_api("POST", url, r.status_code, latency_ms,
                      provider=provider, key_id=acq.key_id)

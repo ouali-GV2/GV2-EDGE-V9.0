@@ -52,6 +52,16 @@ def normalize_ratio(x, max_val):
     return clamp(x / max_val, 0, 1)
 
 # ============================
+# Finnhub candle circuit breaker
+# After _FINNHUB_CANDLE_CB_THRESHOLD consecutive failures → skip Finnhub for _FINNHUB_CANDLE_CB_DURATION seconds
+# ============================
+import time as _time_mod
+_finnhub_candle_failures = 0
+_finnhub_candle_cb_until = 0.0
+_FINNHUB_CANDLE_CB_THRESHOLD = 5    # open CB after 5 consecutive failures
+_FINNHUB_CANDLE_CB_DURATION  = 1800  # 30 minutes
+
+# ============================
 # Price fetch (IBKR or Finnhub)
 # ============================
 
@@ -99,7 +109,11 @@ def fetch_candles(ticker, resolution="1", lookback=120):
         except Exception as e:
             logger.debug(f"⚠️ IBKR fetch failed for {ticker}: {e}, trying Finnhub")
     
-    # Fallback to Finnhub
+    # Fallback to Finnhub (guarded by circuit breaker)
+    global _finnhub_candle_failures, _finnhub_candle_cb_until
+    if _time_mod.time() < _finnhub_candle_cb_until:
+        return None  # circuit breaker open — skip Finnhub entirely
+
     try:
         now = int(datetime.now(timezone.utc).timestamp())
         start = now - lookback * 60
@@ -116,7 +130,7 @@ def fetch_candles(ticker, resolution="1", lookback=120):
         data = r.json()
 
         if data.get("s") != "ok":
-            return None
+            raise ValueError(f"Finnhub candle no_data for {ticker}")
 
         df = pd.DataFrame({
             "open": data["o"],
@@ -125,12 +139,22 @@ def fetch_candles(ticker, resolution="1", lookback=120):
             "close": data["c"],
             "volume": data["v"]
         })
-        
+
+        _finnhub_candle_failures = 0  # reset on success
         logger.debug(f"✅ Finnhub: Fetched {len(df)} bars for {ticker}")
         return df
-    
+
     except Exception as e:
-        logger.error(f"❌ Both IBKR and Finnhub failed for {ticker}: {e}")
+        _finnhub_candle_failures += 1
+        if _finnhub_candle_failures >= _FINNHUB_CANDLE_CB_THRESHOLD:
+            _finnhub_candle_cb_until = _time_mod.time() + _FINNHUB_CANDLE_CB_DURATION
+            logger.warning(
+                f"Finnhub candle circuit breaker OUVERT ({_finnhub_candle_failures} échecs) "
+                f"— skip Finnhub candle pour 30 min"
+            )
+            _finnhub_candle_failures = 0  # reset counter after CB opens
+        else:
+            logger.debug(f"⚠️ Finnhub candle failed for {ticker} ({_finnhub_candle_failures}/{_FINNHUB_CANDLE_CB_THRESHOLD}): {e}")
         return None
 
 # ============================

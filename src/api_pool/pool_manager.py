@@ -65,6 +65,9 @@ DEFAULT_ERROR_COOLDOWN = 30
 CONSECUTIVE_ERROR_THRESHOLD = 3
 EXTENDED_COOLDOWN = 300  # 5 minutes
 
+# 403 Forbidden = key doesn't have access to this endpoint → long cooldown
+FORBIDDEN_COOLDOWN = 3600  # 1 hour
+
 
 # ============================================================================
 # Data Classes
@@ -240,6 +243,12 @@ class APIPoolManager:
             return
 
         metrics = self.tracker.get_metrics(key_id)
+
+        # Forbidden (403) — key has no access to this endpoint
+        if error == "FORBIDDEN":
+            self.registry.set_cooldown(key_id, FORBIDDEN_COOLDOWN)
+            logger.warning(f"Key {key_id} FORBIDDEN (403), cooldown {FORBIDDEN_COOLDOWN}s (1h)")
+            return
 
         # Rate limit error
         if error == "RATE_LIMIT":

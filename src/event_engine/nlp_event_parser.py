@@ -86,6 +86,15 @@ IMPORTANT:
 
 
 def call_grok(text):
+    # Check shared circuit breaker from nlp_enrichi (4h block after quota exhaustion)
+    try:
+        from src.nlp_enrichi import _grok_quota_exhausted_until
+        import time as _t
+        if _t.time() < _grok_quota_exhausted_until:
+            return {}
+    except Exception:
+        pass
+
     payload = {
         "model": "grok-3-fast",
         "messages": [
