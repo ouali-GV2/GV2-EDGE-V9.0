@@ -154,8 +154,13 @@ def fetch_earnings_events(days_forward=7):
 # Fetch breaking news (fallback)
 # ============================
 
-def _fetch_news_category(category: str, extractor) -> list:
-    """Fetch one Finnhub news category and return structured event dicts."""
+def _fetch_news_category(category: str) -> list:
+    """
+    Fetch one Finnhub news category and return structured event dicts.
+    Ticker resolution:
+      - 'merger': Finnhub 'related' field has real stock tickers
+      - 'general': macro news → tagged MARKET (no extraction, avoids false positives)
+    """
     params = {"category": category, "token": FINNHUB_API_KEY}
     try:
         r = pool_safe_get(FINNHUB_GENERAL_NEWS, params=params, timeout=10,
@@ -168,11 +173,8 @@ def _fetch_news_category(category: str, extractor) -> list:
             summary  = item.get("summary", "")
             if not headline:
                 continue
-            # Prefer 'related'; then TickerExtractor; then "MARKET" for macro news
+            # 'related' is only reliable for merger/company-specific categories
             ticker = (item.get("related", "") or "").strip().upper()
-            if not ticker and extractor:
-                extracted = extractor.extract_all(f"{headline}. {summary}")
-                ticker = extracted[0] if extracted else ""
             if not ticker:
                 ticker = "MARKET"
             ts = item.get("datetime", 0)
@@ -198,18 +200,11 @@ def _fetch_news_category(category: str, extractor) -> list:
 def fetch_breaking_news(category="general"):
     """
     General + merger market news — returns structured event dicts.
-    'merger' category naturally has tickers in 'related'.
-    'general' uses TickerExtractor fallback; macro news tagged MARKET.
+    'merger' category has real tickers in Finnhub 'related' field.
+    'general' macro news is tagged ticker=MARKET.
     """
-    try:
-        from src.processors.ticker_extractor import TickerExtractor
-        _extractor = TickerExtractor()
-    except Exception:
-        _extractor = None
-
-    events = _fetch_news_category("general", _extractor)
-    events += _fetch_news_category("merger", _extractor)
-
+    events = _fetch_news_category("general")
+    events += _fetch_news_category("merger")
     logger.info(f"Fetched {len(events)} breaking news (general+merger)")
     return events
 
