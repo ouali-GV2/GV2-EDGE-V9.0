@@ -377,10 +377,17 @@ Only output valid JSON. No text outside JSON.
 # GROK API CALLS
 # ============================
 
+# Module-level circuit breaker for Grok API (shared across calls)
+_grok_quota_exhausted_until: float = 0.0
+
 def _call_grok(prompt: str, text: str, temperature: float = 0.1) -> Optional[Dict]:
     """Make Grok API call with error handling"""
     if not GROK_API_KEY:
         logger.warning("GROK_API_KEY not set")
+        return None
+n    import time as _time
+    global _grok_quota_exhausted_until
+    if _time.time() < _grok_quota_exhausted_until:
         return None
 
     try:
@@ -424,7 +431,14 @@ def _call_grok(prompt: str, text: str, temperature: float = 0.1) -> Optional[Dic
         logger.error(f"JSON parse error: {e}")
         return None
     except Exception as e:
-        logger.error(f"Grok API error: {e}")
+        import time as _time
+        global _grok_quota_exhausted_until
+        err_str = str(e).lower()
+        if "429" in err_str or "rate limit" in err_str or "credits" in err_str or "spending limit" in err_str:
+            _grok_quota_exhausted_until = _time.time() + 14400
+            logger.warning("Grok quota exhausted - circuit breaker 4h")
+        else:
+            logger.error(f"Grok API error: {e}")
         return None
 
 
@@ -475,7 +489,7 @@ def _call_grok_unified(headline: str, body: str) -> Optional[Dict]:
 
     try:
         payload = {
-            "model": "grok-4-fast-reasoning",
+            "model": "grok-3-fast",
             "messages": [
                 {"role": "system", "content": UNIFIED_NLP_PROMPT},
                 {"role": "user", "content": text}

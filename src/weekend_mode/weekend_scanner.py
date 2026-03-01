@@ -13,11 +13,12 @@ Designed to run Saturday/Sunday when API limits aren't critical.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Dict, List, Optional, Set, Callable, Any
 import asyncio
 import logging
+import concurrent.futures
 
 logger = logging.getLogger(__name__)
 
@@ -432,18 +433,68 @@ class WeekendScanner:
         return results
 
     async def _get_universe_tickers(self, universe: str) -> List[str]:
-        """Get tickers for a universe."""
-        # This would typically call an external service
-        # For now, return placeholder
-        universes = {
-            "SP500": [],      # Would fetch S&P 500 constituents
-            "NASDAQ100": [],  # Would fetch NASDAQ 100
-            "RUSSELL2000": [],
-            "ALL": [],
-            "TRADEABLE": [],  # All tradeable US equities
-        }
+        """Get real tickers from universe_loader, filtered by universe type."""
+        try:
+            from src.universe_loader import load_universe
+            loop = asyncio.get_event_loop()
+            df = await loop.run_in_executor(None, load_universe)
+            if df is None or df.empty:
+                return []
+            # Apply market-cap filter for known sub-universes
+            if universe in ("SP500", "NASDAQ100") and "market_cap" in df.columns:
+                sub = df[df["market_cap"] >= 10_000_000_000]["ticker"].dropna().tolist()
+                return sub[:500] if sub else df["ticker"].dropna().tolist()[:500]
+            if universe in ("RUSSELL2000", "SMALLCAP") and "market_cap" in df.columns:
+                sub = df[
+                    (df["market_cap"] >= 100_000_000) &
+                    (df["market_cap"] <= 2_000_000_000)
+                ]["ticker"].dropna().tolist()
+                return sub[:2000] if sub else df["ticker"].dropna().tolist()[:2000]
+            # ALL / TRADEABLE / default: full universe
+            return df["ticker"].dropna().tolist()
+        except Exception as e:
+            logger.error(f"_get_universe_tickers({universe}): {e}")
+            return []
 
-        return universes.get(universe, [])
+    # ============================
+    # Shared data helpers
+    # ============================
+
+    async def _fetch_daily_candles(self, ticker: str, days: int = 60) -> Optional[dict]:
+        """
+        Fetch daily OHLCV candles from Finnhub (available 24/7, even weekends).
+        Returns dict with lists: o, h, l, c, v, t  — or None.
+        """
+        try:
+            from utils.api_guard import pool_safe_get
+            from config import FINNHUB_API_KEY
+            now_ts = int(datetime.now(timezone.utc).timestamp())
+            from_ts = now_ts - days * 86400
+            url = "https://finnhub.io/api/v1/stock/candle"
+            loop = asyncio.get_event_loop()
+            resp = await loop.run_in_executor(
+                None,
+                lambda: pool_safe_get(
+                    url,
+                    params={
+                        "symbol": ticker,
+                        "resolution": "D",
+                        "from": from_ts,
+                        "to": now_ts,
+                        "token": FINNHUB_API_KEY,
+                    },
+                    provider="finnhub",
+                )
+            )
+            if not resp or resp.status_code != 200:
+                return None
+            data = resp.json()
+            if data.get("s") != "ok" or not data.get("c"):
+                return None
+            return data
+        except Exception as e:
+            logger.debug(f"Daily candles {ticker}: {e}")
+            return None
 
     # Default scan handlers
 
@@ -452,26 +503,47 @@ class WeekendScanner:
         ticker: str,
         config: Dict
     ) -> Optional[ScanResult]:
-        """Momentum screen handler."""
-        result = ScanResult(
-            ticker=ticker,
-            scan_type=ScanType.MOMENTUM_SCREEN
-        )
-
-        # Would fetch price data and calculate:
-        # - RSI
-        # - MACD
-        # - Rate of change
-        # - Relative strength vs index
-
-        # Placeholder logic
-        result.momentum_score = 0.0
-        result.overall_score = result.momentum_score
-
-        if result.momentum_score >= self.config.min_momentum_score:
-            result.is_candidate = True
-            result.signals.append("MOMENTUM_STRONG")
-
+        """
+        Momentum scan using Finnhub daily candles (works on weekends).
+        Calculates: 5d return, 20d volume avg, volume spike, RSI-14 proxy.
+        """
+        result = ScanResult(ticker=ticker, scan_type=ScanType.MOMENTUM_SCREEN)
+        try:
+            data = await self._fetch_daily_candles(ticker, days=30)
+            if not data:
+                return result
+            closes  = data["c"]
+            volumes = data["v"]
+            if len(closes) < 6:
+                return result
+            # 5-day return
+            ret_5d = (closes[-1] - closes[-6]) / closes[-6] if closes[-6] else 0
+            # Volume spike: last day vs 20d avg
+            avg_vol = sum(volumes[-20:]) / max(len(volumes[-20:]), 1)
+            vol_spike = (volumes[-1] / avg_vol) if avg_vol > 0 else 1.0
+            # Simple RSI-14 proxy
+            gains  = [max(0, closes[i] - closes[i-1]) for i in range(1, len(closes))]
+            losses = [max(0, closes[i-1] - closes[i]) for i in range(1, len(closes))]
+            ag = sum(gains[-14:])  / 14 if len(gains) >= 14 else 0
+            al = sum(losses[-14:]) / 14 if len(losses) >= 14 else 0
+            rsi = 100 - (100 / (1 + ag / al)) if al > 0 else 50
+            # Score 0-100
+            ret_s  = min(40.0, max(0.0, ret_5d * 200))   # +20% 5d = 40pts
+            vol_s  = min(40.0, (vol_spike - 1) * 20)     # 3x volume = 40pts
+            rsi_s  = min(20.0, max(0.0, (rsi - 50) * 0.4)) if rsi > 50 else 0
+            result.momentum_score = ret_s + vol_s + rsi_s
+            result.overall_score  = result.momentum_score
+            result.data = {"ret_5d": ret_5d, "vol_spike": vol_spike, "rsi": rsi}
+            if ret_5d > 0.10:
+                result.signals.append(f"RETURN_5D_{ret_5d*100:.1f}%")
+            if vol_spike >= 2.0:
+                result.signals.append(f"VOL_SPIKE_{vol_spike:.1f}x")
+            if rsi > 65:
+                result.signals.append(f"RSI_{rsi:.0f}")
+            if result.momentum_score >= self.config.min_momentum_score:
+                result.is_candidate = True
+        except Exception as e:
+            logger.debug(f"Momentum scan {ticker}: {e}")
         return result
 
     async def _scan_technical(
@@ -479,18 +551,53 @@ class WeekendScanner:
         ticker: str,
         config: Dict
     ) -> Optional[ScanResult]:
-        """Technical pattern screen handler."""
-        result = ScanResult(
-            ticker=ticker,
-            scan_type=ScanType.TECHNICAL_PATTERNS
-        )
-
-        # Would analyze:
-        # - Support/resistance levels
-        # - Chart patterns (flags, triangles, etc.)
-        # - Moving average crossovers
-        # - Volume patterns
-
+        """
+        Technical pattern scan using Finnhub daily candles.
+        Detects: higher highs/lows, consolidation box, bollinger squeeze.
+        """
+        result = ScanResult(ticker=ticker, scan_type=ScanType.TECHNICAL_PATTERNS)
+        try:
+            data = await self._fetch_daily_candles(ticker, days=60)
+            if not data:
+                return result
+            closes  = data["c"]
+            highs   = data["h"]
+            lows    = data["l"]
+            volumes = data["v"]
+            if len(closes) < 20:
+                return result
+            score = 0.0
+            # Higher highs + higher lows (uptrend) — last 10 bars
+            hh = sum(1 for i in range(1, 10) if highs[-i] > highs[-i-1])
+            hl = sum(1 for i in range(1, 10) if lows[-i]  > lows[-i-1])
+            if hh >= 6 and hl >= 5:
+                score += 30
+                result.signals.append("HIGHER_HIGHS_LOWS")
+            # Tight consolidation last 5 days (low ATR / range)
+            ranges = [(highs[-i] - lows[-i]) / closes[-i] for i in range(1, 6) if closes[-i]]
+            avg_range = sum(ranges) / len(ranges) if ranges else 0
+            if avg_range < 0.03:
+                score += 25
+                result.signals.append("TIGHT_CONSOLIDATION")
+            # Bollinger squeeze: price inside ±1.5% of 20-day SMA
+            sma20 = sum(closes[-20:]) / 20
+            dev   = abs(closes[-1] - sma20) / sma20 if sma20 else 1
+            if dev < 0.015:
+                score += 20
+                result.signals.append("BB_SQUEEZE")
+            # Volume accumulation: last 5 days avg > 10d avg
+            vol5  = sum(volumes[-5:])  / 5
+            vol10 = sum(volumes[-10:]) / 10
+            if vol10 > 0 and vol5 / vol10 > 1.3:
+                score += 25
+                result.signals.append("VOL_ACCUMULATION")
+            result.technical_score = min(100.0, score)
+            result.overall_score   = result.technical_score
+            result.data = {"avg_range": avg_range, "dev_sma20": dev, "vol_ratio": vol5/vol10 if vol10 else 0}
+            if result.technical_score >= 50:
+                result.is_candidate = True
+        except Exception as e:
+            logger.debug(f"Technical scan {ticker}: {e}")
         return result
 
     async def _scan_earnings(
@@ -498,18 +605,54 @@ class WeekendScanner:
         ticker: str,
         config: Dict
     ) -> Optional[ScanResult]:
-        """Earnings prep screen handler."""
-        result = ScanResult(
-            ticker=ticker,
-            scan_type=ScanType.EARNINGS_PREP
-        )
-
-        # Would check:
-        # - Earnings date
-        # - Analyst estimates
-        # - Historical earnings surprises
-        # - Options implied move
-
+        """Earnings calendar scan via Finnhub /stock/earnings API."""
+        result = ScanResult(ticker=ticker, scan_type=ScanType.EARNINGS_PREP)
+        try:
+            from utils.api_guard import pool_safe_get
+            from config import FINNHUB_API_KEY
+            from datetime import datetime, timezone
+            url = "https://finnhub.io/api/v1/stock/earnings"
+            loop = asyncio.get_event_loop()
+            resp = await loop.run_in_executor(
+                None,
+                lambda: pool_safe_get(
+                    url,
+                    params={"symbol": ticker, "limit": 4, "token": FINNHUB_API_KEY},
+                    provider="finnhub",
+                )
+            )
+            if not resp or resp.status_code != 200:
+                return result
+            earnings = resp.json() or []
+            now = datetime.now(timezone.utc)
+            for e in earnings:
+                date_str = e.get("date") or e.get("period", "")
+                if not date_str:
+                    continue
+                try:
+                    edate = datetime.fromisoformat(date_str).replace(tzinfo=timezone.utc)
+                except Exception:
+                    try:
+                        edate = datetime.strptime(date_str[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                    except Exception:
+                        continue
+                days_until = (edate - now).days
+                if 0 <= days_until <= 14:
+                    result.has_catalyst = True
+                    result.fundamental_score = max(0, min(100, 100 - days_until * 5))
+                    result.overall_score = result.fundamental_score
+                    result.signals.append(f"EARNINGS_IN_{days_until}D")
+                    result.catalysts.append(f"Earnings: {date_str}")
+                    result.is_candidate = True
+                    break
+                elif 15 <= days_until <= 30:
+                    result.fundamental_score = max(0, min(60, 60 - (days_until - 14) * 2))
+                    result.overall_score = result.fundamental_score
+                    result.signals.append(f"EARNINGS_IN_{days_until}D")
+                    result.catalysts.append(f"Earnings: {date_str}")
+                    break
+        except Exception as e:
+            logger.debug(f"Earnings scan {ticker}: {e}")
         return result
 
     async def _scan_sec_filings(
@@ -517,18 +660,40 @@ class WeekendScanner:
         ticker: str,
         config: Dict
     ) -> Optional[ScanResult]:
-        """SEC filings screen handler."""
-        result = ScanResult(
-            ticker=ticker,
-            scan_type=ScanType.SEC_FILINGS
-        )
+        """Recent 8-K / Form 4 scan via SECIngestor (72h look-back)."""
+        result = ScanResult(ticker=ticker, scan_type=ScanType.SEC_FILINGS)
+        try:
+            from src.ingestors.sec_filings_ingestor import SECIngestor
+            import concurrent.futures
+            loop = asyncio.get_event_loop()
 
-        # Would check recent filings:
-        # - 8-K (material events)
-        # - 10-K/10-Q (financials)
-        # - Form 4 (insider transactions)
-        # - S-3/424B (dilution risk)
+            def _fetch():
+                import asyncio as _aio
+                with concurrent.futures.ThreadPoolExecutor(1) as ex:
+                    return ex.submit(_aio.run, SECIngestor().fetch_all_recent(hours_back=72)).result(timeout=25)
 
+            filings = await loop.run_in_executor(None, _fetch)
+            if not filings:
+                return result
+            ticker_filings = [
+                f for f in filings
+                if (getattr(f, "ticker", "") or "").upper() == ticker.upper()
+            ]
+            if ticker_filings:
+                result.has_catalyst = True
+                result.fundamental_score = min(100.0, len(ticker_filings) * 30.0)
+                result.overall_score = result.fundamental_score
+                for f in ticker_filings[:3]:
+                    ftype   = getattr(f, "filing_type", "N/A")
+                    summary = (getattr(f, "summary", "") or "")[:80]
+                    result.signals.append(f"SEC_{ftype}")
+                    result.catalysts.append(f"{ftype}: {summary}")
+                result.is_candidate = any(
+                    getattr(f, "filing_type", "").startswith("8-K")
+                    for f in ticker_filings
+                )
+        except Exception as e:
+            logger.debug(f"SEC filings scan {ticker}: {e}")
         return result
 
     async def _scan_short_interest(
@@ -536,18 +701,32 @@ class WeekendScanner:
         ticker: str,
         config: Dict
     ) -> Optional[ScanResult]:
-        """Short interest screen handler."""
-        result = ScanResult(
-            ticker=ticker,
-            scan_type=ScanType.SHORT_INTEREST
-        )
-
-        # Would analyze:
-        # - Short interest ratio
-        # - Days to cover
-        # - Borrow rate
-        # - FTD data
-
+        """Short squeeze potential via squeeze_boost (Finnhub short data)."""
+        result = ScanResult(ticker=ticker, scan_type=ScanType.SHORT_INTEREST)
+        try:
+            from src.boosters.squeeze_boost import quick_squeeze_check
+            loop = asyncio.get_event_loop()
+            sr = await loop.run_in_executor(None, quick_squeeze_check, ticker)
+            if not sr or not sr.has_data:
+                return result
+            result.data = {
+                "short_float_pct": sr.short_float_pct,
+                "days_to_cover":   sr.days_to_cover,
+                "boost_score":     sr.boost_score,
+                "squeeze_signal":  sr.squeeze_signal.value if sr.squeeze_signal else "NONE",
+            }
+            result.fundamental_score = min(100.0, float(sr.short_float_pct or 0) * 2)
+            result.overall_score = result.fundamental_score
+            if sr.short_float_pct and sr.short_float_pct >= 15:
+                result.signals.append(f"SHORT_FLOAT_{sr.short_float_pct:.1f}%")
+            if sr.days_to_cover and sr.days_to_cover >= 3:
+                result.signals.append(f"DTC_{sr.days_to_cover:.1f}d")
+            if sr.boost_score >= 0.5:
+                result.is_candidate = True
+                result.has_catalyst = True
+                result.catalysts.append(f"Short squeeze: {sr.reason}")
+        except Exception as e:
+            logger.debug(f"Short interest scan {ticker}: {e}")
         return result
 
     async def _scan_sector_rotation(
@@ -555,17 +734,45 @@ class WeekendScanner:
         ticker: str,
         config: Dict
     ) -> Optional[ScanResult]:
-        """Sector rotation screen handler."""
-        result = ScanResult(
-            ticker=ticker,
-            scan_type=ScanType.SECTOR_ROTATION
-        )
-
-        # Would analyze:
-        # - Sector performance
-        # - Money flow
-        # - Relative strength
-
+        """Sector/relative-strength scan via Finnhub basic financials metric."""
+        result = ScanResult(ticker=ticker, scan_type=ScanType.SECTOR_ROTATION)
+        try:
+            from utils.api_guard import pool_safe_get
+            from config import FINNHUB_API_KEY
+            url = "https://finnhub.io/api/v1/stock/metric"
+            loop = asyncio.get_event_loop()
+            resp = await loop.run_in_executor(
+                None,
+                lambda: pool_safe_get(
+                    url,
+                    params={"symbol": ticker, "metric": "all", "token": FINNHUB_API_KEY},
+                    provider="finnhub",
+                )
+            )
+            if not resp or resp.status_code != 200:
+                return result
+            metric = (resp.json() or {}).get("metric", {})
+            if not metric:
+                return result
+            price_52w  = float(metric.get("52WeekPriceReturnDaily", 0) or 0)
+            rev_growth = float(metric.get("revenueGrowthQuarterlyYoy", 0) or 0)
+            score = 0.0
+            if price_52w > 50:   score += 40
+            elif price_52w > 20: score += 25
+            elif price_52w > 0:  score += 10
+            if rev_growth > 0.20: score += 30
+            elif rev_growth > 0.10: score += 15
+            result.fundamental_score = min(100.0, score)
+            result.overall_score     = result.fundamental_score
+            result.data = {"52w_return_pct": price_52w, "rev_growth_yoy": rev_growth}
+            if price_52w > 0:
+                result.signals.append(f"52W_RETURN_{price_52w:.0f}%")
+            if rev_growth > 0.10:
+                result.signals.append(f"REV_GROWTH_{rev_growth*100:.0f}%_YOY")
+            if result.overall_score >= 40:
+                result.is_candidate = True
+        except Exception as e:
+            logger.debug(f"Sector rotation scan {ticker}: {e}")
         return result
 
     async def _scan_news_sentiment(
@@ -573,17 +780,38 @@ class WeekendScanner:
         ticker: str,
         config: Dict
     ) -> Optional[ScanResult]:
-        """News sentiment screen handler."""
-        result = ScanResult(
-            ticker=ticker,
-            scan_type=ScanType.NEWS_SENTIMENT
-        )
-
-        # Would analyze:
-        # - Recent news articles
-        # - Social sentiment
-        # - Analyst ratings
-
+        """News + social sentiment via CompanyNewsScanner + social_buzz."""
+        result = ScanResult(ticker=ticker, scan_type=ScanType.NEWS_SENTIMENT)
+        try:
+            import concurrent.futures
+            loop = asyncio.get_event_loop()
+            # Social buzz
+            from src.social_buzz import get_total_buzz_score
+            buzz = await loop.run_in_executor(None, get_total_buzz_score, ticker)
+            buzz_score = float(buzz or 0)
+            # Company news
+            from src.ingestors.company_news_scanner import CompanyNewsScanner
+            scanner = CompanyNewsScanner()
+            with concurrent.futures.ThreadPoolExecutor(1) as ex:
+                scan_res = await loop.run_in_executor(ex, lambda: scanner.scan_company(ticker))
+            news_count  = int(getattr(scan_res, "article_count", 0) or 0)
+            sentiment   = float(getattr(scan_res, "sentiment_score", 0) or 0)
+            # Composite 0-100
+            buzz_c      = min(40.0, buzz_score * 40)
+            news_c      = min(40.0, news_count * 4)
+            sent_c      = min(20.0, max(0.0, sentiment * 20 + 10))
+            result.sentiment_score = buzz_c + news_c + sent_c
+            result.overall_score   = result.sentiment_score
+            result.data = {"buzz": buzz_score, "news_count": news_count, "sentiment": sentiment}
+            if buzz_score > 0.5:
+                result.signals.append(f"BUZZ_{buzz_score:.2f}")
+            if news_count >= 3:
+                result.signals.append(f"NEWS_{news_count}_ARTICLES")
+            if result.sentiment_score >= 50:
+                result.is_candidate = True
+                result.has_catalyst  = True
+        except Exception as e:
+            logger.debug(f"News sentiment scan {ticker}: {e}")
         return result
 
     # Query methods

@@ -303,7 +303,8 @@ class SEC8KIngestor:
         cutoff = datetime.now(timezone.utc) - timedelta(hours=hours_back)
 
         try:
-            async with aiohttp.ClientSession() as session:
+            _sec_headers = {"User-Agent": "GV2-EDGE research@gv2edge.com", "Accept-Encoding": "gzip, deflate"}
+            async with aiohttp.ClientSession(headers=_sec_headers) as session:
                 async with session.get(SEC_RSS_8K, timeout=30) as resp:
                     if resp.status != 200:
                         logger.error(f"SEC RSS error: {resp.status}")
@@ -556,7 +557,8 @@ class SECForm4Ingestor:
         try:
             url = SEC_COMPANY_SEARCH.format(cik=cik, form_type="4", count=40)
 
-            async with aiohttp.ClientSession() as session:
+            _sec_headers = {"User-Agent": "GV2-EDGE research@gv2edge.com", "Accept-Encoding": "gzip, deflate"}
+            async with aiohttp.ClientSession(headers=_sec_headers) as session:
                 async with session.get(url, timeout=30) as resp:
                     if resp.status != 200:
                         logger.error(f"SEC Form 4 error: {resp.status}")

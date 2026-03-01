@@ -14,7 +14,7 @@ import datetime
 from typing import Dict, List, Optional
 
 from utils.logger import get_logger
-from utils.time_utils import is_premarket, is_market_open, is_market_closed, is_after_hours
+from utils.time_utils import is_premarket, is_market_open, is_market_closed, is_after_hours, market_session
 from src.universe_loader import load_universe
 from src.signal_logger import log_signal
 from src.watch_list import get_watch_list, get_watch_upgrades
@@ -885,6 +885,54 @@ def generate_and_send_watch_list():
 # MAIN LOOP
 # ============================
 
+# ============================
+# WEEKEND SCHEDULER
+# ============================
+
+_weekend_thread = None
+_weekend_thread_lock = threading.Lock()
+
+
+def _run_weekend_scheduler():
+    """Run WeekendScheduler in a daemon thread during weekends/holidays."""
+    try:
+        from src.weekend_mode.weekend_scheduler import get_weekend_scheduler
+        send_system_alert(
+            "\U0001f319 *Weekend Mode demarre*\n"
+            "Scans batch + preparation watchlist lundi en cours..."
+        )
+        scheduler = get_weekend_scheduler()
+        plan = scheduler.create_plan()
+        total_jobs = sum(len(v) for v in plan.jobs_by_phase.values())
+        logger.info(f"Weekend plan cree: {total_jobs} jobs planifies")
+
+        asyncio.run(scheduler.execute_plan(plan))
+
+        logger.info(f"Weekend scheduler termine: {plan.completed_jobs} OK, {plan.failed_jobs} echecs")
+        send_system_alert(
+            f"\u2705 *Weekend Mode termine*\n"
+            f"Jobs: {plan.completed_jobs} reussis / {plan.failed_jobs} echecs"
+        )
+    except Exception as e:
+        logger.error(f"Weekend scheduler failed: {e}", exc_info=True)
+        send_system_alert(f"\u26a0\ufe0f *Weekend Mode echoue*: {e}")
+
+
+def _ensure_weekend_scheduler():
+    """Start the weekend scheduler thread if not already running."""
+    global _weekend_thread
+    with _weekend_thread_lock:
+        if _weekend_thread is not None and _weekend_thread.is_alive():
+            return  # Already running
+        _weekend_thread = threading.Thread(
+            target=_run_weekend_scheduler,
+            name="weekend-scheduler",
+            daemon=True,
+        )
+        _weekend_thread.start()
+        logger.info("Weekend scheduler thread demarre")
+
+
 def run_edge():
     global last_audit_day
     global last_daily_audit_day
@@ -1170,8 +1218,20 @@ def run_edge():
 
             # ---- Market closed ----
             elif is_market_closed():
-                logger.info("Market closed - idle")
-                time.sleep(900)  # 15 min sleep
+                session = market_session()  # "WEEKEND", "HOLIDAY", "CLOSED"
+                if session in ("WEEKEND", "HOLIDAY"):
+                    # Weekend/holiday: run batch scans + monday prep in background thread
+                    _ensure_weekend_scheduler()
+                    status = (
+                        "running" if _weekend_thread and _weekend_thread.is_alive()
+                        else "done"
+                    )
+                    logger.info(f"Market closed ({session}) - weekend mode [{status}]")
+                    time.sleep(1800)  # 30 min cycle on weekends
+                else:
+                    # Overnight weekday: audits/watch-list handled above, just idle
+                    logger.info("Market closed (overnight) - idle")
+                    time.sleep(900)  # 15 min
 
             else:
                 time.sleep(300)

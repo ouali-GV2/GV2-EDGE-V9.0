@@ -204,7 +204,7 @@ class CompanyNewsScanner:
         filtered_items = []
         for item in news_items:
             text = f"{item.headline} {item.summary}"
-            filter_result = self.keyword_filter.filter(text)
+            filter_result = self.keyword_filter.apply(text)
 
             # Keep all items but mark priority
             item.filter_priority = filter_result.priority

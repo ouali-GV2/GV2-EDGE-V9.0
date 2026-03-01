@@ -532,7 +532,7 @@ class WeekendScheduler:
 
     async def _execute_scan_job(self, job: ScheduledJob) -> None:
         """Execute a scan job."""
-        scan_type = ScanType[job.config.get("scan_type", "MOMENTUM_SCREEN")]
+        scan_type = ScanType(job.config.get("scan_type", "MOMENTUM"))
         universe = job.config.get("universe", "ALL")
 
         job_id = self._scanner.queue_scan(
@@ -554,7 +554,7 @@ class WeekendScheduler:
 
     async def _execute_batch_job(self, job: ScheduledJob) -> None:
         """Execute a batch processing job."""
-        task_type = TaskType[job.config.get("task_type", "AGGREGATE_STATS")]
+        task_type = TaskType(job.config.get("task_type", "AGGREGATE_STATS"))
         items = job.config.get("items", [])
 
         task_id = self._processor.queue_task(

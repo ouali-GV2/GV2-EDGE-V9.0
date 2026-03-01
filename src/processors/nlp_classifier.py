@@ -372,7 +372,7 @@ class NLPClassifier:
             import time as _time
             from openai import RateLimitError
             if isinstance(e, RateLimitError):
-                self._quota_exhausted_until = _time.time() + 300  # skip for 5 min
+                self._quota_exhausted_until = _time.time() + 14400  # skip for 4h (credits exhausted)
                 logger.warning(f"Grok quota exhausted — using fallback for 5 min")
             else:
                 logger.warning(f"Grok API error [{type(e).__name__}]: {e}")
@@ -407,7 +407,7 @@ class NLPClassifier:
         )
 
         response = await self.client.chat.completions.create(
-            model="grok-4-fast-reasoning",
+            model="grok-3-fast",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=2000,
         )

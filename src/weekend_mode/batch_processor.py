@@ -531,47 +531,170 @@ class BatchProcessor:
         ticker: str,
         config: Dict
     ) -> Optional[Dict]:
-        """Handle price backfill for a ticker."""
-        # Would fetch historical price data
-        # start_date = config.get("start_date")
-        # end_date = config.get("end_date")
-        return {"ticker": ticker, "status": "backfilled"}
+        """Fetch and cache candle/price data for a ticker via feature_engine."""
+        try:
+            from src.feature_engine import compute_features
+            loop = asyncio.get_event_loop()
+            features = await loop.run_in_executor(None, compute_features, ticker)
+            if not features:
+                return None
+            return {
+                "ticker":       ticker,
+                "bars":         features.get("candle_count", 0),
+                "last_price":   features.get("last_price", 0),
+                "volume_spike": features.get("volume_spike", 0),
+                "status":       "ok",
+            }
+        except Exception as e:
+            logger.debug(f"Backfill prices {ticker}: {e}")
+            return None
 
     async def _handle_calc_indicators(
         self,
         ticker: str,
         config: Dict
     ) -> Optional[Dict]:
-        """Calculate technical indicators for a ticker."""
-        # Would calculate RSI, MACD, etc.
-        return {"ticker": ticker, "indicators": []}
+        """Calculate RSI/MACD/volume indicators via feature_engine."""
+        try:
+            from src.feature_engine import compute_features
+            loop = asyncio.get_event_loop()
+            features = await loop.run_in_executor(None, compute_features, ticker)
+            if not features:
+                return None
+            indicators = {
+                "momentum":           features.get("momentum", 0),
+                "volume_spike":       features.get("volume_spike", 0),
+                "pattern_score":      features.get("pattern_score", 0),
+                "pm_transition":      features.get("pm_transition_score", 0),
+                "acceleration_score": features.get("acceleration_score", 0),
+                "squeeze":            features.get("squeeze", 0),
+                "social_buzz_score":  features.get("social_buzz_score", 0),
+            }
+            return {"ticker": ticker, "indicators": indicators}
+        except Exception as e:
+            logger.debug(f"Calc indicators {ticker}: {e}")
+            return None
 
     async def _handle_aggregate_stats(
         self,
         ticker: str,
         config: Dict
     ) -> Optional[Dict]:
-        """Aggregate statistics for a ticker."""
-        # Would compute various statistics
-        return {"ticker": ticker, "stats": {}}
+        """Compute historical signal statistics from signals_history.db."""
+        try:
+            import sqlite3
+            conn = sqlite3.connect("data/signals_history.db", check_same_thread=False)
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT signal_type, monster_score FROM signals "
+                "WHERE ticker=? ORDER BY timestamp DESC LIMIT 100",
+                (ticker,)
+            )
+            rows = cur.fetchall()
+            conn.close()
+            if not rows:
+                return {"ticker": ticker, "stats": {"total_signals": 0}}
+            by_type: Dict[str, int] = {}
+            scores = []
+            for sig_type, score in rows:
+                by_type[sig_type] = by_type.get(sig_type, 0) + 1
+                if score:
+                    scores.append(float(score))
+            return {
+                "ticker": ticker,
+                "stats": {
+                    "total_signals": len(rows),
+                    "by_type":       by_type,
+                    "avg_score":     round(sum(scores) / len(scores), 3) if scores else 0,
+                    "max_score":     round(max(scores), 3) if scores else 0,
+                },
+            }
+        except Exception as e:
+            logger.debug(f"Aggregate stats {ticker}: {e}")
+            return None
 
     async def _handle_warm_cache(
         self,
         key: str,
         config: Dict
     ) -> Optional[Dict]:
-        """Warm cache for a key."""
-        # Would pre-populate cache
-        return {"key": key, "cached": True}
+        """Pre-populate event and feature caches for a ticker."""
+        loop = asyncio.get_event_loop()
+        cached = []
+        try:
+            from src.event_engine.event_hub import get_events
+            events = await loop.run_in_executor(None, get_events, [key])
+            cached.append(f"events:{len(events or [])}")
+        except Exception as e:
+            logger.debug(f"Warm cache events {key}: {e}")
+        try:
+            from src.feature_engine import compute_features
+            features = await loop.run_in_executor(None, compute_features, key)
+            cached.append(f"features:{'ok' if features else 'none'}")
+        except Exception as e:
+            logger.debug(f"Warm cache features {key}: {e}")
+        return {"key": key, "cached": cached}
 
     async def _handle_cleanup(
         self,
         item: str,
         config: Dict
     ) -> Optional[Dict]:
-        """Cleanup task handler."""
-        # Would perform cleanup operations
-        return {"item": item, "cleaned": True}
+        """Delete old records from signal and cache databases."""
+        import sqlite3
+        from datetime import datetime, timezone, timedelta
+        deleted = 0
+        cutoff_days = int(config.get("cutoff_days", 30))
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=cutoff_days)).isoformat()
+
+        if item in ("signals", "all"):
+            try:
+                conn = sqlite3.connect("data/signals_history.db", check_same_thread=False)
+                cur = conn.cursor()
+                cur.execute("DELETE FROM signals WHERE timestamp < ?", (cutoff,))
+                deleted += cur.rowcount
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                logger.debug(f"Cleanup signals: {e}")
+
+        if item in ("nlp_cache", "all"):
+            try:
+                old_nlp = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+                conn = sqlite3.connect("data/nlp_classifier_cache.db", check_same_thread=False)
+                cur = conn.cursor()
+                # Try both possible timestamp column names
+                for col in ("timestamp", "created_at", "ts"):
+                    try:
+                        cur.execute(f"DELETE FROM cache WHERE {col} < ?", (old_nlp,))
+                        deleted += cur.rowcount
+                        break
+                    except Exception:
+                        continue
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                logger.debug(f"Cleanup nlp_cache: {e}")
+
+        if item in ("repeat_gainers", "all"):
+            try:
+                old_rg = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+                conn = sqlite3.connect("data/repeat_gainers.db", check_same_thread=False)
+                cur = conn.cursor()
+                for col in ("last_seen", "date", "timestamp"):
+                    try:
+                        cur.execute(f"DELETE FROM gainers WHERE {col} < ?", (old_rg,))
+                        deleted += cur.rowcount
+                        break
+                    except Exception:
+                        continue
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                logger.debug(f"Cleanup repeat_gainers: {e}")
+
+        logger.info(f"Cleanup [{item}]: {deleted} records deleted (cutoff {cutoff_days}d)")
+        return {"item": item, "deleted": deleted, "cutoff_days": cutoff_days}
 
     # Query methods
 
