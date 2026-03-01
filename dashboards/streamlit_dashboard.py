@@ -1576,8 +1576,8 @@ with tab9:
         today_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         updated_today = int((prof_df["updated_at"].str[:10] == today_iso).sum()) if "updated_at" in prof_df.columns else 0
         avg_q = prof_df["data_quality"].mean() if "data_quality" in prof_df.columns else 0
-        squeeze_setups = int(((prof_df.get("short_interest_pct", 0) or 0) > 20).sum()) if "short_interest_pct" in prof_df.columns else 0
-        htb_count = int(((prof_df.get("borrow_rate", 0) or 0) > 100).sum()) if "borrow_rate" in prof_df.columns else 0
+        squeeze_setups = int((prof_df["short_interest_pct"].fillna(0) > 20).sum()) if "short_interest_pct" in prof_df.columns else 0
+        htb_count = int((prof_df["borrow_rate"].fillna(0) > 100).sum()) if "borrow_rate" in prof_df.columns else 0
 
         pk1, pk2, pk3, pk4, pk5 = st.columns(5)
         pk1.metric("Total Profiles", f"{len(prof_df):,}")
