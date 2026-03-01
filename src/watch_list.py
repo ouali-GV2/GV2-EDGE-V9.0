@@ -48,7 +48,7 @@ def generate_watch_list(universe_tickers=None, days_forward=7, min_impact=0.7):
     logger.info(f"Generating watch list for next {days_forward} days...")
     
     # Get all events
-    events = get_events(universe_tickers=universe_tickers)
+    events = get_events(tickers=universe_tickers)
     
     if not events:
         logger.warning("No events found for watch list")

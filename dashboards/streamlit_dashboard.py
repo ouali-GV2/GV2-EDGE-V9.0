@@ -916,50 +916,190 @@ with tab3:
 # TAB 4 — MULTI-RADAR V9
 # ─────────────────────────────
 
+@st.cache_data(ttl=300)
+def load_watch_list(days_forward: int = 14, min_impact: float = 0.5) -> list:
+    try:
+        from src.watch_list import generate_watch_list
+        return generate_watch_list(days_forward=days_forward, min_impact=min_impact) or []
+    except Exception:
+        return []
+
+@st.cache_data(ttl=60)
+def load_radar_signals(limit: int = 200) -> list:
+    """Load recent signals with multi_radar_result from DB."""
+    try:
+        conn = sqlite3.connect(str(SIGNALS_DB), check_same_thread=False)
+        rows = conn.execute(
+            "SELECT ticker, signal_type, monster_score, timestamp, metadata "
+            "FROM signals WHERE metadata IS NOT NULL ORDER BY timestamp DESC LIMIT ?",
+            (limit,)
+        ).fetchall()
+        conn.close()
+        results = []
+        for ticker, sig, score, ts, meta_str in rows:
+            meta = json.loads(meta_str) if meta_str else {}
+            radar = meta.get("multi_radar_result")
+            results.append({
+                "ticker": ticker, "signal_type": sig,
+                "score": score or 0, "timestamp": ts,
+                "radar": radar,
+            })
+        return results
+    except Exception:
+        return []
+
+_RADAR_LABELS = {
+    "flow":        ("🌊 Flow",        "#3b82f6"),
+    "catalyst":    ("⚡ Catalyst",    "#f59e0b"),
+    "smart_money": ("💰 Smart Money", "#8b5cf6"),
+    "sentiment":   ("💬 Sentiment",   "#10b981"),
+}
+_SESSION_WEIGHTS = {
+    "Session":      ["AFTER_HOURS","PRE_MARKET","RTH_OPEN","RTH_MIDDAY","RTH_CLOSE","CLOSED"],
+    "Flow %":       [15, 30, 35, 40, 30,  5],
+    "Catalyst %":   [45, 30, 20, 20, 30, 50],
+    "SmartMoney %": [10, 15, 30, 25, 25,  5],
+    "Sentiment %":  [30, 25, 15, 15, 15, 40],
+}
+
 with tab4:
     st.markdown("### 🛰️ Multi-Radar Engine V9")
-    st.markdown("""<div class="card" style="color:#9ca3af;font-size:.83rem;">
-        4 radars indépendants (<b style="color:#06b6d4">asyncio.gather</b>) →
-        Confluence Matrix 2D → Signal final + modifiers (Smart Money, Sentiment)
-    </div>""",unsafe_allow_html=True)
 
-    sw=pd.DataFrame({"Session":["AFTER_HOURS","PRE_MARKET","RTH_OPEN","RTH_MIDDAY","RTH_CLOSE","CLOSED"],
-        "Flow%":[15,30,35,40,30,5],"Catalyst%":[45,30,20,20,30,50],
-        "SmartMoney%":[10,15,30,25,25,5],"Sentiment%":[30,25,15,15,15,40]})
-    cur={"AFTER_HOURS":0,"PREMARKET":1,"RTH":2,"CLOSED":5}.get(session,-1)
-    st.markdown("#### Session Weights"); st.dataframe(sw,use_container_width=True,hide_index=True)
+    # ── Row 1: Session weights + confluence matrix ──────────────────
+    rw1, rw2 = st.columns([3, 2])
+    with rw1:
+        st.markdown("#### ⚖️ Session Weights")
+        df_sw = pd.DataFrame(_SESSION_WEIGHTS)
+        _sess_idx = {"AFTER_HOURS":0,"PRE_MARKET":1,"RTH_OPEN":2,"RTH_MIDDAY":3,"RTH_CLOSE":4,"CLOSED":5}
+        cur_idx = _sess_idx.get(session, -1)
+        st.dataframe(
+            df_sw.style.apply(
+                lambda row: ["background-color:#1e3a5f" if row.name == cur_idx else "" for _ in row],
+                axis=1
+            ),
+            use_container_width=True, hide_index=True,
+        )
+        st.caption(f"Session active : **{session}**")
+    with rw2:
+        st.markdown("#### 🔀 Confluence Matrix")
+        st.markdown(
+            "| Flow \\ Catalyst | HIGH ≥0.6 | MED 0.3-0.6 | LOW <0.3 |\n"
+            "|:---|:---:|:---:|:---:|\n"
+            "| **HIGH** | 🟢 BUY_STRONG | 🔵 BUY | 👁 WATCH |\n"
+            "| **MED**  | 🔵 BUY | 👁 WATCH | 🟡 EARLY |\n"
+            "| **LOW**  | 👁 WATCH | 🟡 EARLY | ⬜ NO_SIGNAL |"
+        )
+        st.caption("Smart Money HIGH → +1 niveau · Sentiment HIGH + 2+ radars → +1 · 4/4 UNANIMOUS → +0.15")
 
-    cm1,cm2=st.columns(2)
-    with cm1:
-        st.markdown("#### Confluence Matrix")
-        st.markdown("""| Flow \\ Catalyst|HIGH ≥0.6|MED 0.3-0.6|LOW <0.3|\n|:---|:---:|:---:|:---:|\n|**HIGH**|BUY_STRONG|BUY|WATCH|\n|**MED**|BUY|WATCH|EARLY|\n|**LOW**|WATCH|EARLY|NO_SIGNAL|""")
-    with cm2:
-        st.markdown("#### Modifiers")
-        st.markdown("- Smart Money HIGH → +1 niveau\n- Sentiment HIGH + 2+ radars → +1\n- 4/4 UNANIMOUS → +0.15\n- 3/4 STRONG → +0.10\n- 2/4 MODERATE → +0.05")
+    st.divider()
 
-    st.markdown("#### Dernier résultat Multi-Radar")
-    try:
-        conn=sqlite3.connect(str(SIGNALS_DB),check_same_thread=False)
-        row=conn.execute("""SELECT ticker,metadata FROM signals
-            WHERE signal_type IN ('BUY_STRONG','BUY') AND metadata IS NOT NULL
-            ORDER BY timestamp DESC LIMIT 1""").fetchone()
-        conn.close()
-        if row:
-            meta=json.loads(row[1]) if row[1] else {}
-            radar=meta.get("multi_radar_result")
-            if isinstance(radar,dict) and "radars" in radar:
-                st.markdown(f"`{row[0]}` — **{radar.get('signal_type','?')}** — Score `{radar.get('final_score',0):.2f}` — `{radar.get('agreement','?')}`")
-                radars=radar.get("radars",{})
-                if radars:
-                    rrows=[{"Radar":n,"Score":f"{i.get('score',0):.2f}","Conf":f"{i.get('confidence',0):.0%}","State":i.get("state","—"),"ms":f"{i.get('scan_time_ms',0):.1f}"} for n,i in radars.items()]
-                    st.dataframe(pd.DataFrame(rrows),use_container_width=True,hide_index=True)
-                    st.plotly_chart(chart_radar_bars(radars),use_container_width=True)
+    # ── Row 2: General Watch List ────────────────────────────────────
+    st.markdown("#### 📋 Watch List Générale")
+    wl_days = st.slider("Horizon (jours)", 1, 30, 14, key="wl_days")
+    wl_imp  = st.slider("Impact minimum", 0.1, 1.0, 0.5, step=0.05, key="wl_imp")
+    watch_list_data = load_watch_list(days_forward=wl_days, min_impact=wl_imp)
+
+    if watch_list_data:
+        wl_rows = []
+        for w in watch_list_data:
+            wl_rows.append({
+                "Ticker":      w.get("ticker", "—"),
+                "Type":        w.get("event_type", "—"),
+                "Date":        w.get("event_date", "—"),
+                "J-":          w.get("days_to_event", "—"),
+                "Impact":      round(w.get("impact", 0), 2),
+                "Prob %":      round(w.get("probability", 0) * 100, 1),
+                "Raison":      w.get("reason", "—"),
+            })
+        st.dataframe(
+            pd.DataFrame(wl_rows),
+            use_container_width=True, hide_index=True, height=300,
+            column_config={
+                "Impact":  st.column_config.ProgressColumn("Impact",  min_value=0, max_value=1, format="%.2f"),
+                "Prob %":  st.column_config.ProgressColumn("Prob %",  min_value=0, max_value=100, format="%.1f%%"),
+                "J-":      st.column_config.NumberColumn("J-", help="Jours avant l'événement"),
+            },
+        )
+        st.caption(f"{len(watch_list_data)} tickers en surveillance")
+    else:
+        st.info("Aucun ticker en watch list (pas d'events à venir avec cet impact)")
+
+    st.divider()
+
+    # ── Row 3: Radar States + Per-Radar Watch Lists ──────────────────
+    st.markdown("#### 🎯 État des Radars & Watch List par Radar")
+    radar_signals = load_radar_signals(200)
+
+    # Build per-radar maps from DB signals
+    per_radar: dict = {k: [] for k in _RADAR_LABELS}
+    radar_last_score: dict = {k: None for k in _RADAR_LABELS}
+    radar_last_state: dict = {k: "—" for k in _RADAR_LABELS}
+
+    for sig in radar_signals:
+        r = sig.get("radar")
+        if not isinstance(r, dict) or "radars" not in r:
+            continue
+        for rname in _RADAR_LABELS:
+            rdata = r["radars"].get(rname, {})
+            if not rdata:
+                continue
+            score = rdata.get("score", 0)
+            state = rdata.get("state", "—")
+            # Update last known score/state (first hit = most recent)
+            if radar_last_score[rname] is None:
+                radar_last_score[rname] = score
+                radar_last_state[rname] = state
+            # Collect active tickers for per-radar watch list
+            if rdata.get("is_active") or score >= 0.3:
+                per_radar[rname].append({
+                    "Ticker":      sig["ticker"],
+                    "Signal":      sig["signal_type"],
+                    "Score radar": round(score, 2),
+                    "State":       state,
+                    "Score total": round(sig["score"], 2),
+                    "Time":        sig["timestamp"][:16] if sig["timestamp"] else "—",
+                })
+
+    # 4 radar state cards
+    rc1, rc2, rc3, rc4 = st.columns(4)
+    for col, (rname, (label, color)) in zip([rc1, rc2, rc3, rc4], _RADAR_LABELS.items()):
+        sc = radar_last_score[rname]
+        st_txt = radar_last_state[rname]
+        n_tickers = len(per_radar[rname])
+        sc_str = f"{sc:.2f}" if sc is not None else "N/A"
+        bar = int((sc or 0) * 10)
+        col.markdown(
+            f"""<div class="card" style="border-left:3px solid {color};padding:.6rem .8rem;">
+            <div style="color:{color};font-weight:700;font-size:.9rem;">{label}</div>
+            <div style="font-size:1.4rem;font-weight:700;margin:.2rem 0;">{sc_str}</div>
+            <div style="font-size:.75rem;color:#9ca3af;">{'█'*bar}{'░'*(10-bar)}</div>
+            <div style="font-size:.72rem;color:#6b7280;margin-top:.3rem;">
+                State: <b style="color:#f9fafb">{st_txt}</b><br>
+                Tickers actifs: <b style="color:#f9fafb">{n_tickers}</b>
+            </div></div>""",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Per-radar watch list tabs
+    rtab_flow, rtab_cat, rtab_sm, rtab_sent = st.tabs([
+        "🌊 Flow", "⚡ Catalyst", "💰 Smart Money", "💬 Sentiment"
+    ])
+    for rtab, rname in zip([rtab_flow, rtab_cat, rtab_sm, rtab_sent], _RADAR_LABELS):
+        with rtab:
+            rows = per_radar[rname]
+            if rows:
+                st.dataframe(
+                    pd.DataFrame(rows).drop_duplicates("Ticker").sort_values("Score radar", ascending=False),
+                    use_container_width=True, hide_index=True, height=280,
+                    column_config={
+                        "Score radar":  st.column_config.ProgressColumn("Score radar",  min_value=0, max_value=1, format="%.2f"),
+                        "Score total":  st.column_config.ProgressColumn("Score total",  min_value=0, max_value=1, format="%.2f"),
+                    },
+                )
             else:
-                st.info("No Multi-Radar result yet")
-        else:
-            st.info("No BUY signal in DB")
-    except Exception:
-        st.info("DB not available")
+                st.info("Aucun signal récent pour ce radar (DB vide ou marché fermé)")
 
 
 # ─────────────────────────────
