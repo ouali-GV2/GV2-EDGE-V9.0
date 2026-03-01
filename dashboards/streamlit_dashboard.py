@@ -842,19 +842,30 @@ with tab3:
             st.info("No events cached yet — click 🔄 Refresh to fetch live events.")
     with cside:
         st.markdown("#### Upcoming Catalysts")
+        upcoming = []
         try:
-            with open(DATA_DIR/"fda_calendar.json") as f: upcoming=json.load(f)[:8]
+            from src.fda_calendar import get_all_fda_events
+            upcoming = get_all_fda_events()[:8]
         except Exception:
-            try:
-                with open(DATA_DIR/"watchlist.json") as f: upcoming=json.load(f)[:8]
-            except Exception: upcoming=[]
+            pass
+        # Fallback: pull FDA/earnings events from the already-loaded cache
+        if not upcoming and events_cache:
+            upcoming = [
+                e for e in events_cache
+                if e.get("type") not in ("news", "earnings") or e.get("type") == "earnings"
+            ][:8]
         for item in upcoming:
-            ticker=item.get("ticker",item.get("symbol","?")); event=item.get("event_type",item.get("type","Event")); date=item.get("date","")
-            st.markdown(f"""<div class="card"><span class="tick">{ticker}</span>
+            ticker = item.get("ticker", item.get("symbol", "?"))
+            event  = item.get("event_type", item.get("type", "Event"))
+            date   = item.get("date", "")
+            st.markdown(
+                f"""<div class="card"><span class="tick">{ticker}</span>
                 <span style="color:#f59e0b;margin-left:.4rem;font-size:.78rem;">{event}</span>
-                <div style="font-size:.68rem;color:#6b7280;">{date}</div></div>""",unsafe_allow_html=True)
+                <div style="font-size:.68rem;color:#6b7280;">{date}</div></div>""",
+                unsafe_allow_html=True
+            )
         if not upcoming:
-            st.caption("data/fda_calendar.json non généré")
+            st.caption("Aucun catalyst FDA trouvé")
 
 
 # ─────────────────────────────
