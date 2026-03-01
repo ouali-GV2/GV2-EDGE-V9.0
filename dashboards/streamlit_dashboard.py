@@ -495,9 +495,10 @@ def chart_api_latency(lines: list[str]):
 
 
 # ============================
-# ============================
 # TOP CONTROLS BAR
 # ============================
+
+session = get_session()
 
 # Row 1 — Filters + actions (always visible)
 cb1,cb2,cb3,cb4,cb5,cb6,cb7 = st.columns([1,1,2,3,1.5,1,1])
@@ -598,7 +599,6 @@ with ct:
     st.markdown("# 🎯 GV2-EDGE V9.0")
     st.markdown("**Multi-Radar Detection** — 3-Layer Pipeline — Small Caps US")
 
-session = get_session()
 sess_map={"PREMARKET":("🌅","Pre-Market","#f59e0b"),"RTH":("📈","RTH","#10b981"),
           "AFTER_HOURS":("🌙","After-Hours","#8b5cf6"),"CLOSED":("💤","Closed","#6b7280")}
 icon,label,color=sess_map.get(session,("❓",session,"#6b7280"))
