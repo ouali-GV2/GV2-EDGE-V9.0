@@ -49,188 +49,217 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@400;500;600;700&display=swap');
 
 :root {
-    --bg-primary:   #0a0e17;
-    --bg-secondary: #111827;
-    --bg-card:      #1a1f2e;
-    --bg-hover:     #252b3b;
+    --bg-primary:   #080c14;
+    --bg-secondary: #0f1623;
+    --bg-card:      #141b28;
+    --bg-hover:     #1e2638;
     --green:  #10b981; --red:    #ef4444;
     --yellow: #f59e0b; --blue:   #3b82f6;
     --purple: #8b5cf6; --cyan:   #06b6d4;
-    --text:   #f9fafb; --muted:  #9ca3af; --dim: #6b7280;
-    --border: #374151; --radius: 10px;
+    --orange: #f97316;
+    --text:   #f1f5f9; --muted:  #94a3b8; --dim: #64748b;
+    --border: #1e2d45; --border-bright: #2d4060; --radius: 12px;
 }
 
-.stApp { background: linear-gradient(135deg,#0a0e17 0%,#0f172a 100%); font-family:'Outfit',sans-serif; }
+/* ── Base ── */
+.stApp { background: radial-gradient(ellipse at 20% 0%,#0d1829 0%,#080c14 60%); font-family:'Outfit',sans-serif; }
+.block-container { padding:1rem 2rem 3rem !important; max-width:1600px; }
 #MainMenu, footer, header { visibility:hidden; }
-/* Hide sidebar entirely — controls moved to top bar */
 section[data-testid="stSidebar"],
-[data-testid="collapsedControl"] { display: none !important; }
-/* Controls top bar */
-.ctrl-bar {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: .5rem .8rem;
-    margin-bottom: .8rem;
-    display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
-}
-h1,h2,h3 { font-family:'Outfit',sans-serif !important; font-weight:600 !important; color:var(--text) !important; }
+[data-testid="collapsedControl"] { display:none !important; }
+
+/* ── Typography ── */
+h1,h2,h3 { font-family:'Outfit',sans-serif !important; font-weight:700 !important; color:var(--text) !important; }
 h1 {
-    font-size:clamp(1.4rem,3vw,2.2rem) !important;
-    background:linear-gradient(90deg,#06b6d4,#10b981);
+    font-size:clamp(1.5rem,3vw,2.4rem) !important; margin:0 !important;
+    background:linear-gradient(90deg,#06b6d4 0%,#10b981 60%,#3b82f6 100%);
     -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
 }
+h2 { font-size:clamp(1rem,2vw,1.3rem) !important; }
+h3 { font-size:clamp(.9rem,1.5vw,1.1rem) !important; }
 
-/* Cards */
+/* ── Cards ── */
 .card {
     background:var(--bg-card); border:1px solid var(--border);
-    border-radius:var(--radius); padding:.9rem; margin:.3rem 0;
-    transition:border-color .2s,box-shadow .2s;
+    border-radius:var(--radius); padding:1rem; margin:.3rem 0;
+    transition:border-color .25s, box-shadow .25s, transform .15s;
+    position:relative; overflow:hidden;
 }
-.card:hover { border-color:var(--cyan); box-shadow:0 0 8px rgba(6,182,212,.15); }
-.card-buy-strong { background:linear-gradient(135deg,rgba(16,185,129,.12),rgba(6,182,212,.08)); border-left:3px solid var(--green); }
-.card-buy        { background:linear-gradient(135deg,rgba(59,130,246,.12),rgba(139,92,246,.08)); border-left:3px solid var(--blue); }
-.card-watch      { background:linear-gradient(135deg,rgba(245,158,11,.12),rgba(239,68,68,.08));  border-left:3px solid var(--yellow); }
-.card-early      { background:linear-gradient(135deg,rgba(139,92,246,.12),rgba(245,158,11,.08)); border-left:3px solid var(--purple); }
-.card-alert      { border:1px solid var(--green); animation:alertPulse 2s infinite; }
-@keyframes alertPulse { 0%,100%{box-shadow:0 0 12px rgba(16,185,129,.3)} 50%{box-shadow:0 0 28px rgba(16,185,129,.6)} }
+.card::before {
+    content:''; position:absolute; inset:0;
+    background:linear-gradient(135deg,rgba(6,182,212,.03),transparent 60%);
+    pointer-events:none;
+}
+.card:hover { border-color:var(--border-bright); box-shadow:0 4px 24px rgba(6,182,212,.1); transform:translateY(-1px); }
+.card-buy-strong {
+    background:linear-gradient(135deg,rgba(16,185,129,.1),rgba(6,182,212,.05));
+    border-left:3px solid var(--green); border-color:rgba(16,185,129,.35);
+}
+.card-buy   { background:linear-gradient(135deg,rgba(59,130,246,.1),rgba(139,92,246,.05)); border-left:3px solid var(--blue); border-color:rgba(59,130,246,.3); }
+.card-watch { background:linear-gradient(135deg,rgba(245,158,11,.08),rgba(239,68,68,.04)); border-left:3px solid var(--yellow); }
+.card-early { background:linear-gradient(135deg,rgba(139,92,246,.1),rgba(245,158,11,.05)); border-left:3px solid var(--purple); }
+.card-alert { border-color:var(--green) !important; animation:alertPulse 2s infinite; }
+@keyframes alertPulse {
+    0%,100% { box-shadow:0 0 12px rgba(16,185,129,.25); }
+    50%      { box-shadow:0 0 32px rgba(16,185,129,.55), 0 0 64px rgba(16,185,129,.15); }
+}
 
-/* KPI Grid — auto-fit responsive */
-.kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:.6rem; margin-bottom:1rem; }
+/* ── KPI Grid ── */
+.kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(115px,1fr)); gap:.55rem; margin-bottom:.9rem; }
 .kpi {
-    text-align:center; padding:1rem .5rem;
+    text-align:center; padding:.9rem .4rem .75rem;
     background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius);
-    transition:border-color .2s;
+    transition:border-color .2s, box-shadow .2s; position:relative; overflow:hidden;
 }
-.kpi:hover { border-color:var(--cyan); }
-.kpi-value { font-family:'JetBrains Mono',monospace; font-size:clamp(1.3rem,2.5vw,1.9rem); font-weight:700; color:var(--text); }
-.kpi-label { font-size:.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-top:.2rem; }
-.kpi-delta { font-family:'JetBrains Mono',monospace; font-size:.76rem; margin-top:.2rem; }
-.kpi-sub   { font-size:.65rem; color:var(--dim); margin-top:.1rem; }
+.kpi::after { content:''; position:absolute; inset:0; background:linear-gradient(180deg,rgba(255,255,255,.02),transparent); pointer-events:none; }
+.kpi:hover  { border-color:var(--border-bright); box-shadow:0 2px 16px rgba(6,182,212,.08); }
+.kpi-value  { font-family:'JetBrains Mono',monospace; font-size:clamp(1.2rem,2.3vw,1.75rem); font-weight:700; color:var(--text); line-height:1.1; }
+.kpi-label  { font-size:.65rem; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin-top:.25rem; }
+.kpi-delta  { font-family:'JetBrains Mono',monospace; font-size:.72rem; margin-top:.2rem; }
+.kpi-sub    { font-size:.62rem; color:var(--dim); margin-top:.08rem; }
 
-/* Signal card grid — responsive */
-.sig-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(255px,1fr)); gap:.55rem; }
+/* ── IBKR status badge (always visible) ── */
+.ibkr-badge {
+    display:inline-flex; align-items:center; gap:.4rem;
+    padding:.35rem .75rem; border-radius:20px; font-size:.78rem; font-weight:600;
+    font-family:'Outfit',sans-serif; border:1px solid;
+    transition:all .3s;
+}
+.ibkr-connected {
+    background:rgba(16,185,129,.12); color:var(--green);
+    border-color:rgba(16,185,129,.4); box-shadow:0 0 12px rgba(16,185,129,.15);
+}
+.ibkr-disconnected {
+    background:rgba(239,68,68,.12); color:var(--red);
+    border-color:rgba(239,68,68,.4); box-shadow:0 0 12px rgba(239,68,68,.1);
+}
+.ibkr-reconnecting {
+    background:rgba(245,158,11,.12); color:var(--yellow);
+    border-color:rgba(245,158,11,.4); animation:reconnPulse 1.5s infinite;
+}
+@keyframes reconnPulse { 0%,100%{opacity:1} 50%{opacity:.6} }
 
-/* Gap grid */
-.gap-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(100px,1fr)); gap:.45rem; }
-.gap-card { padding:.55rem; border-radius:8px; text-align:center; background:var(--bg-card); border:1px solid var(--border); }
+/* ── Status bar (API health strip) ── */
+.status-bar {
+    display:flex; flex-wrap:wrap; align-items:center; gap:.5rem;
+    background:var(--bg-secondary); border:1px solid var(--border);
+    border-radius:10px; padding:.45rem .8rem; margin-bottom:.6rem;
+}
+.status-chip {
+    display:inline-flex; align-items:center; gap:.3rem;
+    padding:.18rem .5rem; border-radius:6px; font-size:.68rem; font-weight:600;
+    font-family:'JetBrains Mono',monospace;
+}
+.chip-ok  { background:rgba(16,185,129,.12); color:var(--green); }
+.chip-err { background:rgba(239,68,68,.12);  color:var(--red); }
+.chip-warn{ background:rgba(245,158,11,.12); color:var(--yellow); }
+.chip-dim { background:rgba(100,116,139,.12); color:var(--muted); }
+
+/* ── Signal grid ── */
+.sig-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:.6rem; }
+
+/* ── Gap grid ── */
+.gap-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(95px,1fr)); gap:.4rem; }
+.gap-card { padding:.5rem; border-radius:8px; text-align:center; background:var(--bg-card); border:1px solid var(--border); }
 .gap-up   { border-left:3px solid var(--green); }
 .gap-down { border-left:3px solid var(--red); }
 
-/* Badges */
-.badge { display:inline-block; padding:.13rem .45rem; border-radius:4px; font-size:.68rem; font-weight:600; font-family:'JetBrains Mono',monospace; }
-.badge-strong { background:rgba(16,185,129,.2);  color:var(--green); }
-.badge-buy    { background:rgba(59,130,246,.2);  color:var(--blue); }
-.badge-watch  { background:rgba(245,158,11,.2);  color:var(--yellow); }
-.badge-early  { background:rgba(139,92,246,.2);  color:var(--purple); }
+/* ── Badges ── */
+.badge { display:inline-block; padding:.15rem .5rem; border-radius:5px; font-size:.68rem; font-weight:700; font-family:'JetBrains Mono',monospace; letter-spacing:.03em; }
+.badge-strong { background:rgba(16,185,129,.18); color:var(--green); border:1px solid rgba(16,185,129,.3); }
+.badge-buy    { background:rgba(59,130,246,.18);  color:#60a5fa;     border:1px solid rgba(59,130,246,.3); }
+.badge-watch  { background:rgba(245,158,11,.18);  color:var(--yellow);border:1px solid rgba(245,158,11,.3); }
+.badge-early  { background:rgba(139,92,246,.18);  color:#a78bfa;     border:1px solid rgba(139,92,246,.3); }
 
-.tick { font-family:'JetBrains Mono',monospace; font-weight:700; font-size:1rem; color:var(--cyan); }
+/* ── Misc ── */
+.tick { font-family:'JetBrains Mono',monospace; font-weight:700; font-size:1rem; color:var(--cyan); letter-spacing:.02em; }
+.live-dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--green); animation:ldot 1.8s infinite; margin-right:5px; vertical-align:middle; }
+@keyframes ldot { 0%,100%{opacity:1;box-shadow:0 0 6px var(--green)} 50%{opacity:.3;box-shadow:none} }
 
-.live-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--green); animation:pulse 1.5s infinite; margin-right:5px; }
-@keyframes pulse { 0%,100%{opacity:1;box-shadow:0 0 4px var(--green)} 50%{opacity:.4;box-shadow:none} }
-
-/* Log viewer */
+/* ── Log viewer ── */
 .log-container {
-    background:#0d1117; border:1px solid var(--border); border-radius:8px;
-    padding:.9rem; font-family:'JetBrains Mono',monospace; font-size:.71rem;
-    height:480px; overflow-y:auto; white-space:pre-wrap; word-break:break-all;
+    background:#060a10; border:1px solid var(--border); border-radius:10px;
+    padding:1rem; font-family:'JetBrains Mono',monospace; font-size:.7rem;
+    height:500px; overflow-y:auto; white-space:pre-wrap; word-break:break-all;
+    line-height:1.6;
 }
-.log-error { color:#ef4444; } .log-warn { color:#f59e0b; }
-.log-info  { color:#9ca3af; } .log-ok   { color:#10b981; }
+.log-error { color:#f87171; } .log-warn { color:#fbbf24; }
+.log-info  { color:#94a3b8; } .log-ok   { color:#34d399; }
 
-/* API monitor */
-.api-ok   { color:var(--green); }
-.api-warn { color:var(--yellow); }
-.api-err  { color:var(--red); }
-.api-row  { font-family:'JetBrains Mono',monospace; font-size:.7rem; border-bottom:1px solid #1e2436; padding:.18rem 0; }
+/* ── API monitor ── */
+.api-ok   { color:var(--green); } .api-warn { color:var(--yellow); } .api-err { color:var(--red); }
+.api-row  { font-family:'JetBrains Mono',monospace; font-size:.68rem; border-bottom:1px solid #111c2e; padding:.2rem 0; }
 
-/* Status pills */
-.pill { display:inline-block; padding:.2rem .55rem; border-radius:20px; font-size:.7rem; font-weight:600; margin:.1rem; }
-.pill-ok   { background:rgba(16,185,129,.15); color:var(--green);  border:1px solid var(--green); }
-.pill-err  { background:rgba(239,68,68,.15);  color:var(--red);    border:1px solid var(--red); }
+/* ── Pills ── */
+.pill { display:inline-block; padding:.22rem .6rem; border-radius:20px; font-size:.7rem; font-weight:600; margin:.1rem; }
+.pill-ok  { background:rgba(16,185,129,.15); color:var(--green); border:1px solid rgba(16,185,129,.4); }
+.pill-err { background:rgba(239,68,68,.15);  color:var(--red);   border:1px solid rgba(239,68,68,.4); }
 
-/* Sidebar */
-section[data-testid="stSidebar"] { background:var(--bg-secondary); }
+/* ── Tabs ── */
+.stTabs [data-baseweb="tab-list"] {
+    gap:2px; background:var(--bg-secondary);
+    padding:.3rem; border-radius:var(--radius);
+    border:1px solid var(--border); flex-wrap:wrap;
+}
+.stTabs [data-baseweb="tab"] {
+    background:transparent; border-radius:8px; color:var(--muted);
+    font-weight:500; font-size:clamp(.7rem,.82vw,.84rem); padding:.32rem .58rem;
+    transition:all .2s;
+}
+.stTabs [aria-selected="true"] {
+    background:linear-gradient(135deg,rgba(6,182,212,.15),rgba(16,185,129,.08));
+    color:var(--text); box-shadow:0 1px 8px rgba(6,182,212,.12);
+}
 
-/* Tabs */
-.stTabs [data-baseweb="tab-list"] { gap:3px; background:var(--bg-card); padding:.3rem; border-radius:var(--radius); flex-wrap:wrap; }
-.stTabs [data-baseweb="tab"] { background:transparent; border-radius:6px; color:var(--muted); font-weight:500; font-size:clamp(.72rem,.85vw,.86rem); padding:.35rem .6rem; }
-.stTabs [aria-selected="true"] { background:var(--bg-hover); color:var(--text); }
+/* ── Divider ── */
+hr { border-color:var(--border) !important; margin:.6rem 0 !important; }
 
-/* Scrollbar */
-::-webkit-scrollbar { width:5px; height:5px; }
-::-webkit-scrollbar-track { background:var(--bg-secondary); }
-::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width:4px; height:4px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border-bright); border-radius:4px; }
 
-/* Colors */
+/* ── Color helpers ── */
 .green{color:var(--green)} .red{color:var(--red)} .yellow{color:var(--yellow)}
 .cyan{color:var(--cyan)}   .muted{color:var(--muted)}
 .score-high{color:var(--green)} .score-med{color:var(--yellow)} .score-low{color:var(--red)}
 
 /* ════════════════════════════════════════
-   RESPONSIVE — Desktop first
+   RESPONSIVE
    ════════════════════════════════════════ */
-
-/* ── Tablet (641-1024px) ── */
 @media (min-width:641px) and (max-width:1024px) {
-    .block-container { padding:1rem 1rem 2rem !important; }
+    .block-container { padding:.8rem .8rem 2rem !important; }
     [data-testid="stHorizontalBlock"] { flex-wrap:wrap !important; }
     [data-testid="column"] { min-width:calc(50% - .5rem) !important; }
-    .kpi-grid  { grid-template-columns:repeat(3,1fr) !important; }
-    .sig-grid  { grid-template-columns:repeat(2,1fr) !important; }
-    .gap-grid  { grid-template-columns:repeat(3,1fr) !important; }
+    .kpi-grid { grid-template-columns:repeat(3,1fr) !important; }
+    .sig-grid { grid-template-columns:repeat(2,1fr) !important; }
+    .gap-grid { grid-template-columns:repeat(3,1fr) !important; }
 }
 
-/* ── Mobile (<640px) ── */
 @media (max-width:640px) {
-    /* Reduce outer padding */
-    .block-container { padding:.3rem .3rem 2rem !important; }
-
-    /* Stack ALL Streamlit columns */
+    .block-container { padding:.3rem .4rem 2rem !important; }
     [data-testid="stHorizontalBlock"] { flex-wrap:wrap !important; gap:.2rem !important; }
     [data-testid="column"] { width:100% !important; flex:1 1 100% !important; min-width:0 !important; }
-
-    /* Header */
-    h1 { font-size:1.15rem !important; }
-    h2 { font-size:.95rem !important; }
-    h3 { font-size:.85rem !important; }
-
-    /* KPI: 2 per row */
-    .kpi-grid { grid-template-columns:repeat(2,1fr) !important; gap:.35rem !important; }
-    .kpi { padding:.55rem .3rem !important; }
-    .kpi-value { font-size:1.05rem !important; }
-    .kpi-label { font-size:.58rem !important; }
-    .kpi-sub,.kpi-delta { font-size:.58rem !important; }
-
-    /* Signal/gap grids */
+    h1 { font-size:1.1rem !important; }
+    h2 { font-size:.9rem !important; }
+    h3 { font-size:.82rem !important; }
+    .kpi-grid { grid-template-columns:repeat(2,1fr) !important; gap:.3rem !important; }
+    .kpi { padding:.5rem .3rem !important; }
+    .kpi-value { font-size:1rem !important; }
+    .kpi-label { font-size:.56rem !important; }
+    .kpi-sub,.kpi-delta { font-size:.56rem !important; }
     .sig-grid { grid-template-columns:1fr !important; }
     .gap-grid { grid-template-columns:repeat(2,1fr) !important; }
-
-    /* Cards: tighter */
-    .card { padding:.6rem !important; margin:.2rem 0 !important; }
-    .tick { font-size:.85rem !important; }
-
-    /* Tabs: smaller text, horizontal scroll */
+    .card { padding:.6rem !important; }
     .stTabs [data-baseweb="tab-list"] { overflow-x:auto !important; flex-wrap:nowrap !important; }
-    .stTabs [data-baseweb="tab"] { font-size:.62rem !important; padding:.2rem .38rem !important; white-space:nowrap !important; }
-
-    /* Log: shorter */
-    .log-container { height:260px !important; font-size:.62rem !important; }
-
-    /* Tables: horizontal scroll */
+    .stTabs [data-baseweb="tab"] { font-size:.6rem !important; padding:.18rem .35rem !important; white-space:nowrap !important; }
+    .log-container { height:280px !important; font-size:.6rem !important; }
     [data-testid="stDataFrame"] > div { overflow-x:auto !important; }
-
-    /* Charts: full width */
-    [data-testid="stPlotlyChart"] { width:100% !important; }
-
-    /* Expanders: tighter */
-    [data-testid="stExpander"] { padding:.3rem !important; }
-
-    /* Pills: smaller */
-    .pill { font-size:.6rem !important; padding:.15rem .35rem !important; }
-
-    /* Hide desktop-only decorative elements */
+    .pill { font-size:.58rem !important; padding:.12rem .3rem !important; }
     .desktop-only { display:none !important; }
+    .status-bar { gap:.3rem; padding:.3rem .5rem; }
+    .status-chip { font-size:.6rem !important; }
+    .ibkr-badge { font-size:.68rem !important; padding:.25rem .5rem !important; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -437,6 +466,33 @@ def get_ibkr_info() -> dict | None:
         return None
 
 
+@st.cache_data(ttl=10)
+def get_ibkr_status() -> dict:
+    """Fast IBKR connection snapshot — TTL 10s for live header badge."""
+    result = {"connected": False, "state": "UNKNOWN", "uptime": None, "latency": None}
+    try:
+        from config import USE_IBKR_DATA
+        if not USE_IBKR_DATA:
+            result["state"] = "DISABLED"
+            return result
+        from src.ibkr_connector import get_ibkr
+        ibkr = get_ibkr()
+        if ibkr is None:
+            result["state"] = "DISCONNECTED"
+            return result
+        result["connected"] = bool(ibkr.connected)
+        info = ibkr.get_connection_stats() if hasattr(ibkr, "get_connection_stats") else {}
+        result["state"] = info.get("state", "CONNECTED" if ibkr.connected else "DISCONNECTED")
+        up = info.get("uptime_seconds", 0) or 0
+        result["uptime"] = f"{up/3600:.1f}h" if up >= 3600 else f"{up/60:.0f}m" if up >= 60 else f"{up:.0f}s"
+        lat = info.get("heartbeat_latency_ms")
+        if lat is not None:
+            result["latency"] = f"{lat:.0f}ms"
+    except Exception:
+        result["state"] = "ERROR"
+    return result
+
+
 # ============================
 # HELPERS
 # ============================
@@ -619,53 +675,33 @@ with cb7:
     if st.button("🔄 Refresh", use_container_width=True):
         st.cache_data.clear(); st.rerun()
 
-# Row 2 — Status expanders (collapsed by default)
-ex1, ex2, ex3 = st.columns(3)
-with ex1:
-    with st.expander("🛡️ APIs & IBKR"):
-        status = get_system_status()
-        cols_s = st.columns(2)
-        for i,(k,ok) in enumerate(status.items()):
-            cls = "pill-ok" if ok else "pill-err"
-            cols_s[i%2].markdown(
-                f'<span class="pill {cls}">{"🟢" if ok else "🔴"} {k.upper()}</span>',
-                unsafe_allow_html=True)
-        ibkr_info = get_ibkr_info()
-        if ibkr_info:
-            state = ibkr_info.get("state","?")
-            icons = {"CONNECTED":"🟢","RECONNECTING":"🟡","DISCONNECTED":"🔴","CONNECTING":"🟡","FAILED":"🔴"}
-            st.markdown(f"{icons.get(state,'⚪')} IBKR **{state}**")
-            if ibkr_info.get("connected"):
-                up  = ibkr_info.get("uptime_seconds",0)
-                lat = ibkr_info.get("heartbeat_latency_ms",0)
-                ustr = f"{up/3600:.1f}h" if up>=3600 else f"{up/60:.0f}min"
-                st.caption(f"Up: {ustr}  Lat: {lat:.0f}ms")
-with ex2:
-    with st.expander("🧠 V9 Modules"):
-        try:
-            from config import (ENABLE_MULTI_RADAR,ENABLE_ACCELERATION_ENGINE,ENABLE_SMALLCAP_RADAR,
-                ENABLE_PRE_HALT_ENGINE,ENABLE_RISK_GUARD,ENABLE_MARKET_MEMORY,
-                ENABLE_CATALYST_V3,ENABLE_PRE_SPIKE_RADAR)
-            mods={"Signal Producer (L1)":True,"Order Computer (L2)":True,"Execution Gate (L3)":True,
-                  "Multi-Radar V9":ENABLE_MULTI_RADAR,"Acceleration V8":ENABLE_ACCELERATION_ENGINE,
-                  "SmallCap Radar":ENABLE_SMALLCAP_RADAR,"Pre-Halt Engine":ENABLE_PRE_HALT_ENGINE,
-                  "Risk Guard V8":ENABLE_RISK_GUARD,"Market Memory":ENABLE_MARKET_MEMORY,
-                  "Catalyst V3":ENABLE_CATALYST_V3,"Pre-Spike Radar":ENABLE_PRE_SPIKE_RADAR}
-        except Exception:
-            mods={"Signal Producer":True,"Order Computer":True,"Execution Gate":True}
-        for name,active in mods.items():
-            st.markdown(f"{'🟢' if active else '⚫'} {name}")
-with ex3:
-    with st.expander("🕐 Session"):
-        try:
-            from zoneinfo import ZoneInfo
-            _et = datetime.now(ZoneInfo("America/New_York"))
-        except Exception:
-            _et = datetime.now(timezone.utc) - timedelta(hours=4)
-        st.markdown(f"**{_et.strftime('%A %H:%M:%S')} ET**")
-        st.caption(f"Session : **{session}**  •  GV2-EDGE v9.0")
+# ── Status bar — API health chips (compact, always visible) ──
+ibkr_st    = get_ibkr_status()
+sys_status = get_system_status()
 
-st.divider()
+_ibkr_cls  = "chip-ok" if ibkr_st["connected"] else ("chip-warn" if ibkr_st["state"] in ("RECONNECTING","CONNECTING") else "chip-err")
+_ibkr_icon = "🟢" if ibkr_st["connected"] else ("🟡" if ibkr_st["state"] in ("RECONNECTING","CONNECTING") else "🔴")
+_ibkr_label = f"IBKR {ibkr_st['state']}"
+if ibkr_st["connected"] and ibkr_st.get("uptime"):
+    _ibkr_label += f" ↑{ibkr_st['uptime']}"
+if ibkr_st.get("latency"):
+    _ibkr_label += f" {ibkr_st['latency']}"
+
+chips = f'<span class="status-chip {_ibkr_cls}">{_ibkr_icon} {_ibkr_label}</span>'
+for k, ok in sys_status.items():
+    if k == "ibkr": continue
+    chips += f'<span class="status-chip {"chip-ok" if ok else "chip-err"}">{"🟢" if ok else "🔴"} {k.upper()}</span>'
+
+try:
+    from config import (ENABLE_MULTI_RADAR, ENABLE_ACCELERATION_ENGINE, ENABLE_SMALLCAP_RADAR,
+                        ENABLE_TICKER_PROFILES)
+    chips += f'<span class="status-chip {"chip-ok" if ENABLE_MULTI_RADAR else "chip-dim"}">{"●" if ENABLE_MULTI_RADAR else "○"} Multi-Radar</span>'
+    chips += f'<span class="status-chip {"chip-ok" if ENABLE_ACCELERATION_ENGINE else "chip-dim"}">{"●" if ENABLE_ACCELERATION_ENGINE else "○"} Accel V8</span>'
+    chips += f'<span class="status-chip {"chip-ok" if ENABLE_TICKER_PROFILES else "chip-dim"}">{"●" if ENABLE_TICKER_PROFILES else "○"} Profiles</span>'
+except Exception:
+    pass
+
+st.markdown(f'<div class="status-bar">{chips}</div>', unsafe_allow_html=True)
 
 
 # ============================
@@ -683,34 +719,54 @@ if auto_refresh:
 # HEADER
 # ============================
 
-ct, cs, ctime = st.columns([5,1,1])
-with ct:
-    st.markdown("# 🎯 GV2-EDGE V9.0")
-    st.markdown("**Multi-Radar Detection** — 3-Layer Pipeline — Small Caps US")
-
-sess_map={"PREMARKET":("🌅","Pre-Market","#f59e0b"),"RTH":("📈","RTH","#10b981"),
-          "AFTER_HOURS":("🌙","After-Hours","#8b5cf6"),"CLOSED":("💤","Closed","#6b7280")}
-icon,label,color=sess_map.get(session,("❓",session,"#6b7280"))
-with cs:
-    st.markdown(f"""<div style="text-align:center;padding:.8rem;">
-        <div style="font-size:1.4rem;">{icon}</div>
-        <div style="color:{color};font-weight:600;font-size:.85rem;">{label}</div>
-    </div>""",unsafe_allow_html=True)
-
 try:
     from zoneinfo import ZoneInfo
     now_et=datetime.now(ZoneInfo("America/New_York"))
 except Exception:
     now_et=datetime.now(timezone.utc)-timedelta(hours=4)
 
-with ctime:
-    st.markdown(f"""<div style="text-align:right;padding:.8rem;color:#9ca3af;font-size:.78rem;">
-        <div><span class="live-dot"></span><b style="color:#10b981;">LIVE</b></div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:.92rem;color:#f9fafb;">{now_et.strftime("%H:%M:%S")}</div>
-        <div style="font-size:.65rem;">{now_et.strftime("%Y-%m-%d")} ET | ↻{refresh_sec}s</div>
-    </div>""",unsafe_allow_html=True)
+sess_map={"PREMARKET":("🌅","Pre-Market","#f59e0b"),"RTH":("📈","RTH","#10b981"),
+          "AFTER_HOURS":("🌙","After-Hours","#8b5cf6"),"CLOSED":("💤","Closed","#64748b")}
+sess_icon,sess_label,sess_color=sess_map.get(session,("❓",session,"#64748b"))
 
-st.markdown("---")
+# IBKR badge HTML
+_ibkr_badge_cls = "ibkr-connected" if ibkr_st["connected"] else (
+    "ibkr-reconnecting" if ibkr_st["state"] in ("RECONNECTING","CONNECTING") else "ibkr-disconnected")
+_ibkr_dot = "🟢" if ibkr_st["connected"] else ("🟡" if "CONNECT" in ibkr_st["state"] else "🔴")
+_ibkr_txt = f"IBKR {'CONNECTED' if ibkr_st['connected'] else ibkr_st['state']}"
+_ibkr_detail = ""
+if ibkr_st["connected"]:
+    if ibkr_st.get("uptime"):   _ibkr_detail += f" · ↑{ibkr_st['uptime']}"
+    if ibkr_st.get("latency"):  _ibkr_detail += f" · {ibkr_st['latency']}"
+
+hcol1, hcol2, hcol3 = st.columns([4, 3, 2])
+with hcol1:
+    st.markdown("# 🎯 GV2-EDGE V9.0")
+    st.markdown(
+        f'<span style="color:#64748b;font-size:.82rem;">Multi-Radar V9 · 3-Layer Pipeline · Small Caps US</span>',
+        unsafe_allow_html=True)
+with hcol2:
+    st.markdown(
+        f"""<div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;padding-top:.6rem;">
+            <span class="ibkr-badge {_ibkr_badge_cls}">{_ibkr_dot} {_ibkr_txt}<span style="opacity:.7;font-size:.7rem;">{_ibkr_detail}</span></span>
+            <span style="background:rgba(255,255,255,.05);border:1px solid #1e2d45;border-radius:20px;
+                         padding:.3rem .7rem;font-size:.78rem;font-weight:600;color:{sess_color};">
+                {sess_icon} {sess_label}</span>
+        </div>""", unsafe_allow_html=True)
+with hcol3:
+    st.markdown(
+        f"""<div style="text-align:right;padding-top:.5rem;">
+            <div style="font-size:.72rem;color:#64748b;margin-bottom:.1rem;">
+                <span class="live-dot"></span><span style="color:#10b981;font-weight:600;">LIVE</span>
+                &nbsp;·&nbsp;↻{refresh_sec}s
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:1.05rem;font-weight:700;color:#f1f5f9;">
+                {now_et.strftime("%H:%M:%S")}
+            </div>
+            <div style="font-size:.65rem;color:#64748b;">{now_et.strftime("%a %Y-%m-%d")} ET</div>
+        </div>""", unsafe_allow_html=True)
+
+st.markdown("<div style='margin:.4rem 0;border-bottom:1px solid #1e2d45;'></div>", unsafe_allow_html=True)
 
 
 # ============================
@@ -748,16 +804,22 @@ score_cls  = "green" if hit_rate>0.65 else "yellow" if hit_rate>0.40 else "red"
 strong_cls = "green" if buy_strong>0 else "muted"
 delta_str  = f"+{delta_sig}" if delta_sig>=0 else str(delta_sig)
 
+# IBKR KPI — state + uptime
+_ibkr_kpi_val = "🟢 ON" if ibkr_st["connected"] else ("🟡 …" if "CONNECT" in ibkr_st["state"] else "🔴 OFF")
+_ibkr_kpi_sub = ibkr_st.get("uptime") or ibkr_st["state"]
+_ibkr_kpi_cls = "green" if ibkr_st["connected"] else ("yellow" if "CONNECT" in ibkr_st["state"] else "red")
+
 kpis = (
     kpi_html(total_sig,             "Signals",     f"Last {hours_back}h", delta_str,  "green" if delta_sig>0 else "muted"),
-    kpi_html(buy_strong,            "BUY_STRONG",  "Hot",                 f"+{strong_1h}/1h", strong_cls),
+    kpi_html(buy_strong,            "BUY_STRONG",  "Hot picks",           f"+{strong_1h}/1h", strong_cls),
     kpi_html(f"{hit_rate*100:.1f}%","Hit Rate",    "Target ≥65%",         "",          score_cls),
     kpi_html(f"{avg_lead:.1f}h",    "Lead Time",   "Before spike",        "",          "cyan"),
     kpi_html(f"{universe_sz:,}",    "Universe",    "Tickers tracked",     "",          "cyan"),
+    kpi_html(_ibkr_kpi_val,         "IBKR",        _ibkr_kpi_sub,         ibkr_st.get("latency",""), _ibkr_kpi_cls),
     kpi_html(session,               "Session",     now_et.strftime("%H:%M"), "",       "yellow" if session!="CLOSED" else "muted"),
 )
 st.markdown(f'<div class="kpi-grid">{"".join(kpis)}</div>', unsafe_allow_html=True)
-st.markdown("<br>", unsafe_allow_html=True)
+st.markdown("<div style='margin:.2rem 0'></div>", unsafe_allow_html=True)
 
 
 # ============================
