@@ -65,6 +65,13 @@ data/logs/*.log
 *.sqlite
 *.db
 
+# Runtime-generated data (not code — excluded from git)
+data/events_cache.json
+data/signals_history.db
+data/repeat_gainers.db
+data/market_memory.db
+data/nlp_cache.db
+
 # ========= OS FILES =========
 .DS_Store
 .DS_Store?

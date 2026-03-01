@@ -1,0 +1,393 @@
+{
+  "audit_version": "V8.0",
+  "audit_date": "2026-02-28",
+  "generated_at": "2026-02-28T20:48:18.678462",
+  "config": {
+    "min_change_pct": 20
+  },
+  "summary": {
+    "total_signals": 0,
+    "buy_signals": 0,
+    "total_gainers": 20,
+    "hit_rate": 0,
+    "early_catch_rate": 0,
+    "miss_rate": 1.0,
+    "fp_count": 0,
+    "hard_fp_count": 0,
+    "avg_lead_time_hours": 0
+  },
+  "performance_grade": "F",
+  "funnel": {
+    "total_signals": 0,
+    "actionable": 0,
+    "non_actionable": 0,
+    "funnel_rate": 0,
+    "gate_stats": {}
+  },
+  "hit_analysis": {
+    "hit_count": 0,
+    "hit_rate": 0,
+    "early_catch_rate": 0,
+    "on_time_rate": 0,
+    "avg_lead_time_hours": 0,
+    "v8_state_distribution": {},
+    "hits": []
+  },
+  "miss_analysis": {
+    "miss_count": 20,
+    "miss_rate": 1.0,
+    "reason_breakdown": {
+      "outside_universe": 3,
+      "no_signal": 17,
+      "weak_signal": 0,
+      "blocked_by_gate": 0,
+      "low_score": 0
+    },
+    "missed_tickers": [
+      "AAOI",
+      "AGIG",
+      "ALBT",
+      "ALOY",
+      "ARLO",
+      "BATL",
+      "BDMD",
+      "BNAI",
+      "BWIN",
+      "CD",
+      "CDIO",
+      "CMMB",
+      "CORD",
+      "DELL",
+      "DLLL",
+      "EDSA",
+      "ENSC",
+      "FIGS",
+      "HUBC",
+      "INDO"
+    ],
+    "misses": [
+      {
+        "ticker": "AAOI",
+        "change_pct": 56.88,
+        "reason": "no_signal",
+        "source": "finviz",
+        "in_universe": true
+      },
+      {
+        "ticker": "AGIG",
+        "change_pct": 20.11,
+        "reason": "no_signal",
+        "source": "finviz",
+        "in_universe": true
+      },
+      {
+        "ticker": "ALBT",
+        "change_pct": 36.7,
+        "reason": "no_signal",
+        "source": "finviz",
+        "in_universe": true
+      },
+      {
+        "ticker": "ALOY",
+        "change_pct": 32.14,
+        "reason": "no_signal",
+        "source": "finviz",
+        "in_universe": true
+      },
+      {
+        "ticker": "ARLO",
+        "change_pct": 27.15,
+        "reason": "no_signal",
+        "source": "finviz",
+        "in_universe": true
+      },
+      {
+        "ticker": "BATL",
+        "change_pct": 33.01,
+        "reason": "no_signal",
+        "source": "finviz",
+        "in_universe": true
+      },
+      {
+        "ticker": "BDMD",
+        "change_pct": 30.7,
+        "reason": "no_signal",
+        "source": "finviz",
+        "in_universe": true
+      },
+      {
+        "ticker": "BNAI",
+        "change_pct": 36.13,
+        "reason": "no_signal",
+        "source": "finviz",
+        "in_universe": true
+      },
+      {
+        "ticker": "BWIN",
+        "change_pct": 25.64,
+        "reason": "no_signal",
+        "source": "finviz",
+        "in_universe": true
+      },
+      {
+        "ticker": "CD",
+        "change_pct": 41.45,
+        "reason": "no_signal",
+        "source": "finviz",
+        "in_universe": true
+      },
+      {
+        "ticker": "CDIO",
+        "change_pct": 25.48,
+        "reason": "no_signal",
+        "source": "finviz",
+        "in_universe": true
+      },
+      {
+        "ticker": "CMMB",
+        "change_pct": 20.0,
+        "reason": "outside_universe",
+        "source": "finviz",
+        "in_universe": false
+      },
+      {
+        "ticker": "CORD",
+        "change_pct": 36.1,
+        "reason": "outside_universe",
+        "source": "finviz",
+        "in_universe": false
+      },
+      {
+        "ticker": "DELL",
+        "change_pct": 21.93,
+        "reason": "no_signal",
+        "source": "finviz",
+        "in_universe": true
+      },
+      {
+        "ticker": "DLLL",
+        "change_pct": 43.61,
+        "reason": "outside_universe",
+        "source": "finviz",
+        "in_universe": false
+      },
+      {
+        "ticker": "EDSA",
+        "change_pct": 41.94,
+        "reason": "no_signal",
+        "source": "finviz",
+        "in_universe": true
+      },
+      {
+        "ticker": "ENSC",
+        "change_pct": 57.77,
+        "reason": "no_signal",
+        "source": "finviz",
+        "in_universe": true
+      },
+      {
+        "ticker": "FIGS",
+        "change_pct": 23.9,
+        "reason": "no_signal",
+        "source": "finviz",
+        "in_universe": true
+      },
+      {
+        "ticker": "HUBC",
+        "change_pct": 29.26,
+        "reason": "no_signal",
+        "source": "finviz",
+        "in_universe": true
+      },
+      {
+        "ticker": "INDO",
+        "change_pct": 22.25,
+        "reason": "no_signal",
+        "source": "finviz",
+        "in_universe": true
+      }
+    ]
+  },
+  "fp_analysis": {
+    "fp_count": 0,
+    "hard_fp_count": 0,
+    "soft_fp_count": 0,
+    "near_miss_count": 0,
+    "hard_fp": [],
+    "soft_fp": [],
+    "near_miss": [],
+    "fp_tickers": []
+  },
+  "v8_stats": {
+    "acceleration_engine": {
+      "available": true,
+      "error": "AccelerationEngine.get_top_movers() got an unexpected keyword argument 'limit'"
+    },
+    "smallcap_radar": {
+      "available": true,
+      "critical_blips": 0,
+      "high_blips": 0,
+      "medium_blips": 0,
+      "low_blips": 0,
+      "actionable_count": 0,
+      "scan_duration_ms": 0.018078004359267652,
+      "critical_tickers": [],
+      "high_tickers": []
+    },
+    "execution_gate": {
+      "available": true,
+      "signals_evaluated": 0,
+      "signals_allowed": 0,
+      "signals_blocked": 0,
+      "block_rate": 0,
+      "block_breakdown": {},
+      "trades_today": 0,
+      "trade_limit": 5
+    }
+  },
+  "top_gainers": [
+    {
+      "ticker": "AAOI",
+      "price": 84.23,
+      "change_pct": 56.88,
+      "source": "finviz",
+      "date": "2026-02-28"
+    },
+    {
+      "ticker": "AGIG",
+      "price": 4.18,
+      "change_pct": 20.11,
+      "source": "finviz",
+      "date": "2026-02-28"
+    },
+    {
+      "ticker": "ALBT",
+      "price": 1.49,
+      "change_pct": 36.7,
+      "source": "finviz",
+      "date": "2026-02-28"
+    },
+    {
+      "ticker": "ALOY",
+      "price": 18.46,
+      "change_pct": 32.14,
+      "source": "finviz",
+      "date": "2026-02-28"
+    },
+    {
+      "ticker": "ARLO",
+      "price": 15.69,
+      "change_pct": 27.15,
+      "source": "finviz",
+      "date": "2026-02-28"
+    },
+    {
+      "ticker": "BATL",
+      "price": 5.52,
+      "change_pct": 33.01,
+      "source": "finviz",
+      "date": "2026-02-28"
+    },
+    {
+      "ticker": "BDMD",
+      "price": 2.98,
+      "change_pct": 30.7,
+      "source": "finviz",
+      "date": "2026-02-28"
+    },
+    {
+      "ticker": "BNAI",
+      "price": 35.68,
+      "change_pct": 36.13,
+      "source": "finviz",
+      "date": "2026-02-28"
+    },
+    {
+      "ticker": "BWIN",
+      "price": 23.23,
+      "change_pct": 25.64,
+      "source": "finviz",
+      "date": "2026-02-28"
+    },
+    {
+      "ticker": "CD",
+      "price": 5.87,
+      "change_pct": 41.45,
+      "source": "finviz",
+      "date": "2026-02-28"
+    },
+    {
+      "ticker": "CDIO",
+      "price": 6.55,
+      "change_pct": 25.48,
+      "source": "finviz",
+      "date": "2026-02-28"
+    },
+    {
+      "ticker": "CMMB",
+      "price": 1.86,
+      "change_pct": 20.0,
+      "source": "finviz",
+      "date": "2026-02-28"
+    },
+    {
+      "ticker": "CORD",
+      "price": 17.57,
+      "change_pct": 36.1,
+      "source": "finviz",
+      "date": "2026-02-28"
+    },
+    {
+      "ticker": "DELL",
+      "price": 148.08,
+      "change_pct": 21.93,
+      "source": "finviz",
+      "date": "2026-02-28"
+    },
+    {
+      "ticker": "DLLL",
+      "price": 29.41,
+      "change_pct": 43.61,
+      "source": "finviz",
+      "date": "2026-02-28"
+    },
+    {
+      "ticker": "EDSA",
+      "price": 2.2,
+      "change_pct": 41.94,
+      "source": "finviz",
+      "date": "2026-02-28"
+    },
+    {
+      "ticker": "ENSC",
+      "price": 0.62,
+      "change_pct": 57.77,
+      "source": "finviz",
+      "date": "2026-02-28"
+    },
+    {
+      "ticker": "FIGS",
+      "price": 15.45,
+      "change_pct": 23.9,
+      "source": "finviz",
+      "date": "2026-02-28"
+    },
+    {
+      "ticker": "HUBC",
+      "price": 1.48,
+      "change_pct": 29.26,
+      "source": "finviz",
+      "date": "2026-02-28"
+    },
+    {
+      "ticker": "INDO",
+      "price": 5.88,
+      "change_pct": 22.25,
+      "source": "finviz",
+      "date": "2026-02-28"
+    }
+  ],
+  "trend": {
+    "comparison_available": false
+  }
+}

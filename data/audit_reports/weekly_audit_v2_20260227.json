@@ -1,0 +1,24 @@
+{
+  "audit_date": "2026-02-27T22:58:39.920171",
+  "period": {
+    "start": "2026-02-20T22:58:39.920171",
+    "end": "2026-02-27T22:58:39.920171",
+    "days": 7
+  },
+  "metrics": {
+    "hit_rate": 0,
+    "early_catch_rate": 0,
+    "avg_lead_time_hours": 0,
+    "miss_rate": 0.0,
+    "false_positive_count": 1
+  },
+  "details": {
+    "hits": [],
+    "misses": [],
+    "false_positives": [
+      "AAPL"
+    ],
+    "pattern_performance": {}
+  },
+  "recommendations": []
+}
