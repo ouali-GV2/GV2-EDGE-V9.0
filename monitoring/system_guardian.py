@@ -1,6 +1,7 @@
 import time
 import psutil
 import requests
+from datetime import datetime, timezone
 
 from utils.logger import get_logger
 from alerts.telegram_alerts import send_system_alert, send_ibkr_connection_alert
@@ -190,6 +191,28 @@ def analyze_health():
             )
 
         ibkr_msg = f" | IBKR {current_state} ({ibkr_status['latency_ms']:.0f}ms)"
+
+        # Write status snapshot for dashboard (separate process — no shared memory)
+        try:
+            import json as _json, os as _os
+            _status_path = "data/ibkr_status.json"
+            _os.makedirs("data", exist_ok=True)
+            _up = ibkr_status.get("uptime_seconds", 0) or 0
+            _uptime_str = (f"{_up/3600:.1f}h" if _up >= 3600
+                           else f"{_up/60:.0f}m" if _up >= 60
+                           else f"{_up:.0f}s")
+            _payload = {
+                "connected":  ibkr_status["connected"],
+                "state":      current_state,
+                "latency_ms": ibkr_status.get("latency_ms", 0),
+                "uptime":     _uptime_str if ibkr_status["connected"] else None,
+                "latency":    f"{ibkr_status.get('latency_ms',0):.0f}ms" if ibkr_status["connected"] else None,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            with open(_status_path, "w") as _f:
+                _json.dump(_payload, _f)
+        except Exception:
+            pass
 
     logger.info(
         f"Health OK | CPU {stats['cpu']}% RAM {stats['ram']}% DISK {stats['disk']}%{ibkr_msg}"

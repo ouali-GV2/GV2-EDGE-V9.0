@@ -466,28 +466,34 @@ def get_ibkr_info() -> dict | None:
         return None
 
 
-@st.cache_data(ttl=10)
+@st.cache_data(ttl=15)
 def get_ibkr_status() -> dict:
-    """Fast IBKR connection snapshot — TTL 10s for live header badge."""
+    """
+    Read IBKR status from data/ibkr_status.json written by system_guardian (main process).
+    Streamlit and main.py run in separate processes — no shared memory.
+    """
     result = {"connected": False, "state": "UNKNOWN", "uptime": None, "latency": None}
+    status_file = DATA_DIR / "ibkr_status.json"
     try:
-        from config import USE_IBKR_DATA
-        if not USE_IBKR_DATA:
-            result["state"] = "DISABLED"
-            return result
-        from src.ibkr_connector import get_ibkr
-        ibkr = get_ibkr()
-        if ibkr is None:
-            result["state"] = "DISCONNECTED"
-            return result
-        result["connected"] = bool(ibkr.connected)
-        info = ibkr.get_connection_stats() if hasattr(ibkr, "get_connection_stats") else {}
-        result["state"] = info.get("state", "CONNECTED" if ibkr.connected else "DISCONNECTED")
-        up = info.get("uptime_seconds", 0) or 0
-        result["uptime"] = f"{up/3600:.1f}h" if up >= 3600 else f"{up/60:.0f}m" if up >= 60 else f"{up:.0f}s"
-        lat = info.get("heartbeat_latency_ms")
-        if lat is not None:
-            result["latency"] = f"{lat:.0f}ms"
+        if status_file.exists():
+            with open(status_file) as f:
+                data = json.load(f)
+            result["connected"] = bool(data.get("connected", False))
+            result["state"]     = data.get("state", "UNKNOWN")
+            result["uptime"]    = data.get("uptime")
+            result["latency"]   = data.get("latency")
+            # Stale check: if file not updated in >3 min, mark as stale
+            updated = data.get("updated_at", "")
+            if updated:
+                try:
+                    age = (datetime.now(timezone.utc) - datetime.fromisoformat(updated)).total_seconds()
+                    if age > 180:
+                        result["state"] = f"STALE ({int(age//60)}m)"
+                        result["connected"] = False
+                except Exception:
+                    pass
+        else:
+            result["state"] = "NO DATA"
     except Exception:
         result["state"] = "ERROR"
     return result
