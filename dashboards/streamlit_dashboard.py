@@ -37,7 +37,7 @@ st.set_page_config(
     page_title="GV2-EDGE V9.0",
     page_icon="🎯",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 # ============================
@@ -61,10 +61,21 @@ st.markdown("""
 }
 
 .stApp { background: linear-gradient(135deg,#0a0e17 0%,#0f172a 100%); font-family:'Outfit',sans-serif; }
-#MainMenu, footer { visibility:hidden; }
-/* Hide Streamlit branding in header but keep the sidebar toggle button */
-header [data-testid="stToolbar"] { visibility:hidden; }
-header { background:transparent !important; }
+#MainMenu, footer, header { visibility:hidden; }
+/* Fixed sidebar — always visible, no collapse button */
+section[data-testid="stSidebar"] {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    height: 100vh !important;
+    z-index: 999 !important;
+    transform: none !important;
+    overflow-y: auto !important;
+}
+/* Hide both the close button (inside sidebar) and the collapsed toggle (outside) */
+[data-testid="collapsedControl"],
+button[title="Close sidebar"],
+button[aria-label="Close sidebar"] { display: none !important; }
 h1,h2,h3 { font-family:'Outfit',sans-serif !important; font-weight:600 !important; color:var(--text) !important; }
 h1 {
     font-size:clamp(1.4rem,3vw,2.2rem) !important;
