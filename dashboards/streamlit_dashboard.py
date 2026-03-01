@@ -499,6 +499,44 @@ def get_ibkr_status() -> dict:
     return result
 
 
+@st.cache_data(ttl=300)
+def load_watch_list() -> list:
+    """Load watch list — no dynamic args so @st.cache_data works properly (runs once per TTL)."""
+    import concurrent.futures
+    try:
+        from src.watch_list import generate_watch_list
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            fut = ex.submit(generate_watch_list, days_forward=30, min_impact=0.1)
+            return fut.result(timeout=8) or []
+    except Exception:
+        return []
+
+
+@st.cache_data(ttl=60)
+def load_radar_signals(limit: int = 200) -> list:
+    """Load recent signals with multi_radar_result from DB."""
+    try:
+        conn = sqlite3.connect(str(SIGNALS_DB), check_same_thread=False)
+        rows = conn.execute(
+            "SELECT ticker, signal_type, monster_score, timestamp, metadata "
+            "FROM signals WHERE metadata IS NOT NULL ORDER BY timestamp DESC LIMIT ?",
+            (limit,)
+        ).fetchall()
+        conn.close()
+        results = []
+        for ticker, sig, score, ts, meta_str in rows:
+            meta = json.loads(meta_str) if meta_str else {}
+            radar = meta.get("multi_radar_result")
+            results.append({
+                "ticker": ticker, "signal_type": sig,
+                "score": score or 0, "timestamp": ts,
+                "radar": radar,
+            })
+        return results
+    except Exception:
+        return []
+
+
 # ============================
 # HELPERS
 # ============================
@@ -1103,38 +1141,6 @@ with tab3:
 # TAB 4 — MULTI-RADAR V9
 # ─────────────────────────────
 
-@st.cache_data(ttl=300)
-def load_watch_list(days_forward: int = 14, min_impact: float = 0.5) -> list:
-    try:
-        from src.watch_list import generate_watch_list
-        return generate_watch_list(days_forward=days_forward, min_impact=min_impact) or []
-    except Exception:
-        return []
-
-@st.cache_data(ttl=60)
-def load_radar_signals(limit: int = 200) -> list:
-    """Load recent signals with multi_radar_result from DB."""
-    try:
-        conn = sqlite3.connect(str(SIGNALS_DB), check_same_thread=False)
-        rows = conn.execute(
-            "SELECT ticker, signal_type, monster_score, timestamp, metadata "
-            "FROM signals WHERE metadata IS NOT NULL ORDER BY timestamp DESC LIMIT ?",
-            (limit,)
-        ).fetchall()
-        conn.close()
-        results = []
-        for ticker, sig, score, ts, meta_str in rows:
-            meta = json.loads(meta_str) if meta_str else {}
-            radar = meta.get("multi_radar_result")
-            results.append({
-                "ticker": ticker, "signal_type": sig,
-                "score": score or 0, "timestamp": ts,
-                "radar": radar,
-            })
-        return results
-    except Exception:
-        return []
-
 _RADAR_LABELS = {
     "flow":        ("🌊 Flow",        "#3b82f6"),
     "catalyst":    ("⚡ Catalyst",    "#f59e0b"),
@@ -1156,16 +1162,12 @@ with tab4:
     rw1, rw2 = st.columns([3, 2])
     with rw1:
         st.markdown("#### ⚖️ Session Weights")
-        df_sw = pd.DataFrame(_SESSION_WEIGHTS)
         _sess_idx = {"AFTER_HOURS":0,"PRE_MARKET":1,"RTH_OPEN":2,"RTH_MIDDAY":3,"RTH_CLOSE":4,"CLOSED":5}
         cur_idx = _sess_idx.get(session, -1)
-        st.dataframe(
-            df_sw.style.apply(
-                lambda row: ["background-color:#1e3a5f" if row.name == cur_idx else "" for _ in row],
-                axis=1
-            ),
-            use_container_width=True, hide_index=True,
-        )
+        df_sw = pd.DataFrame(_SESSION_WEIGHTS)
+        # Mark active session with indicator — no Styler (avoids Streamlit compatibility issues)
+        df_sw.insert(0, "▶", ["◀" if i == cur_idx else "" for i in range(len(df_sw))])
+        st.dataframe(df_sw, use_container_width=True, hide_index=True)
         st.caption(f"Session active : **{session}**")
     with rw2:
         st.markdown("#### 🔀 Confluence Matrix")
@@ -1184,19 +1186,25 @@ with tab4:
     st.markdown("#### 📋 Watch List Générale")
     wl_days = st.slider("Horizon (jours)", 1, 30, 14, key="wl_days")
     wl_imp  = st.slider("Impact minimum", 0.1, 1.0, 0.5, step=0.05, key="wl_imp")
-    watch_list_data = load_watch_list(days_forward=wl_days, min_impact=wl_imp)
+    # load_watch_list() fetches all data once (cached 5min) — filter client-side
+    _all_wl = load_watch_list()
+    watch_list_data = [
+        w for w in _all_wl
+        if w.get("impact", 0) >= wl_imp
+        and w.get("days_to_event", 99) <= wl_days
+    ]
 
     if watch_list_data:
         wl_rows = []
         for w in watch_list_data:
             wl_rows.append({
-                "Ticker":      w.get("ticker", "—"),
-                "Type":        w.get("event_type", "—"),
-                "Date":        w.get("event_date", "—"),
-                "J-":          w.get("days_to_event", "—"),
-                "Impact":      round(w.get("impact", 0), 2),
-                "Prob %":      round(w.get("probability", 0) * 100, 1),
-                "Raison":      w.get("reason", "—"),
+                "Ticker":  w.get("ticker", "—"),
+                "Type":    w.get("event_type", "—"),
+                "Date":    w.get("event_date", "—"),
+                "J-":      w.get("days_to_event", "—"),
+                "Impact":  round(w.get("impact", 0), 2),
+                "Prob %":  round(w.get("probability", 0) * 100, 1),
+                "Raison":  w.get("reason", "—"),
             })
         st.dataframe(
             pd.DataFrame(wl_rows),
