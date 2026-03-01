@@ -277,6 +277,26 @@ def load_universe_size() -> int:
     return 0
 
 
+@st.cache_data(ttl=300)
+def load_universe_df() -> pd.DataFrame:
+    """Load full universe CSV (ticker, exchange, name)."""
+    for uf in (DATA_DIR/"universe.csv", DATA_DIR/"universe_v3.csv"):
+        if uf.exists():
+            try:
+                df = pd.read_csv(uf)
+                # Normalise column names
+                df.columns = [c.strip().lower() for c in df.columns]
+                if "ticker" not in df.columns:
+                    return pd.DataFrame()
+                df["ticker"]   = df["ticker"].astype(str).str.upper().str.strip()
+                df["exchange"] = df.get("exchange", pd.Series([""] * len(df))).fillna("").astype(str).str.upper()
+                df["name"]     = df.get("name",     pd.Series([""] * len(df))).fillna("").astype(str)
+                return df[["ticker","exchange","name"]].sort_values("ticker").reset_index(drop=True)
+            except Exception:
+                pass
+    return pd.DataFrame(columns=["ticker","exchange","name"])
+
+
 @st.cache_data(ttl=60)
 def load_latest_audit() -> dict | None:
     if not AUDIT_DIR.exists():
@@ -729,9 +749,10 @@ st.markdown("<br>", unsafe_allow_html=True)
 # TABS
 # ============================
 
-tab1,tab2,tab3,tab4,tab5,tab6,tab7 = st.tabs([
+tab1,tab2,tab3,tab4,tab5,tab6,tab7,tab8 = st.tabs([
     "📡 Live Signals", "📊 Analytics", "📅 Events",
     "🛰️ Multi-Radar V9", "🌐 API Monitor", "📋 Live Logs", "🔍 Audit",
+    "🌍 Universe",
 ])
 
 
@@ -1339,6 +1360,95 @@ with tab7:
                     run_daily_audit(send_telegram=False)
                     st.cache_data.clear(); st.success("Done!"); st.rerun()
                 except Exception as e: st.error(f"Audit failed: {e}")
+
+
+# ─────────────────────────────
+# TAB 8 — UNIVERSE
+# ─────────────────────────────
+
+with tab8:
+    st.markdown("### 🌍 Universe — All Tracked Tickers")
+
+    uni_df = load_universe_df()
+
+    if uni_df.empty:
+        st.warning("Universe CSV not found. Run the system at least once to generate `data/universe.csv`.")
+    else:
+        # ── Stats row ──
+        exchanges = uni_df["exchange"].unique().tolist()
+        exc_counts = uni_df["exchange"].value_counts()
+
+        u1, u2, u3, u4 = st.columns(4)
+        u1.metric("Total Tickers", f"{len(uni_df):,}")
+        u2.metric("Exchanges", len([e for e in exchanges if e]))
+        top_exc = exc_counts.index[0] if len(exc_counts) else "—"
+        u3.metric("Largest Exchange", top_exc, f"{exc_counts.iloc[0]:,} tickers" if len(exc_counts) else "")
+        # Coverage: tickers with a name
+        named = int((uni_df["name"].str.len() > 0).sum())
+        u4.metric("With Company Name", f"{named:,}")
+
+        st.markdown("---")
+
+        # ── Filters ──
+        fc1, fc2, fc3 = st.columns([2, 2, 1])
+        with fc1:
+            search_q = st.text_input("🔍 Search ticker or name", placeholder="e.g. AAPL, Apple, TSLA…")
+        with fc2:
+            exc_options = ["All"] + sorted([e for e in exchanges if e])
+            exc_filter = st.selectbox("Exchange", exc_options)
+        with fc3:
+            sort_col = st.selectbox("Sort by", ["ticker", "exchange", "name"])
+
+        # ── Apply filters ──
+        filtered = uni_df.copy()
+        if search_q:
+            q = search_q.strip().upper()
+            mask = (filtered["ticker"].str.contains(q, na=False) |
+                    filtered["name"].str.upper().str.contains(q, na=False))
+            filtered = filtered[mask]
+        if exc_filter != "All":
+            filtered = filtered[filtered["exchange"] == exc_filter]
+        filtered = filtered.sort_values(sort_col).reset_index(drop=True)
+
+        # ── Result count ──
+        st.caption(f"Showing **{len(filtered):,}** of **{len(uni_df):,}** tickers")
+
+        # ── Exchange breakdown chips ──
+        chips_html = ""
+        for exc, cnt in exc_counts.items():
+            if not exc:
+                continue
+            color = {"XNAS": "#3b82f6", "XNYS": "#10b981", "ARCX": "#8b5cf6",
+                     "XASE": "#f59e0b", "BATS": "#06b6d4"}.get(exc, "#6b7280")
+            chips_html += (f'<span style="display:inline-block;margin:.2rem;padding:.2rem .55rem;'
+                           f'border-radius:20px;font-size:.72rem;font-weight:600;'
+                           f'background:{color}22;color:{color};border:1px solid {color};">'
+                           f'{exc} <b>{cnt:,}</b></span>')
+        if chips_html:
+            st.markdown(chips_html, unsafe_allow_html=True)
+            st.markdown("")
+
+        # ── Main table ──
+        st.dataframe(
+            filtered.rename(columns={"ticker": "Ticker", "exchange": "Exchange", "name": "Company Name"}),
+            use_container_width=True,
+            hide_index=True,
+            height=min(600, 40 + len(filtered) * 35),
+            column_config={
+                "Ticker":       st.column_config.TextColumn("Ticker", width="small"),
+                "Exchange":     st.column_config.TextColumn("Exchange", width="small"),
+                "Company Name": st.column_config.TextColumn("Company Name"),
+            }
+        )
+
+        # ── Download button ──
+        csv_bytes = filtered.to_csv(index=False).encode()
+        st.download_button(
+            "⬇️ Download CSV",
+            data=csv_bytes,
+            file_name=f"universe_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv",
+        )
 
 
 # ============================
