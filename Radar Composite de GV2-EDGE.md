@@ -1,26 +1,30 @@
-Spécification complète – Radar Composite de GV2-EDGE
+Spécification complète — Radar Composite de GV2-EDGE
 
-Objectif du système
+Objectif
 
-Le Radar Composite est le moteur principal de détection d’opportunités de trading de GV2-EDGE.
+Le Radar Composite est le moteur principal de détection d’opportunités de GV2-EDGE.
 
-Son objectif est de détecter les actions susceptibles de devenir des top gainers avant que le mouvement soit visible pour la majorité des traders.
+Son objectif est de détecter les actions susceptibles de devenir des top gainers avant que le mouvement soit visible pour la majorité du marché.
 
-Le radar doit identifier les déséquilibres du marché dès leur apparition, en analysant plusieurs signaux simultanément :
+Le radar doit identifier les déséquilibres du marché dès leur apparition, en analysant simultanément plusieurs signaux :
 
-- augmentation du volume
+- augmentation anormale du volume
 - accélération des transactions
 - pression acheteur
 - rotation du float
 - compression du prix avant breakout
 
-Le radar fonctionne en continu sur les données temps réel du marché.
+Le radar fonctionne en temps réel sur les données marché.
+
+Les données temps réel peuvent provenir de :
+
+- Polygon.io
 
 ---
 
-Architecture générale du système
+Architecture générale
 
-Le radar fonctionne selon le pipeline suivant :
+Le système fonctionne selon le pipeline suivant :
 
 Market Data Stream
 ↓
@@ -34,9 +38,9 @@ Momentum Score
 ↓
 Ranking des actions
 ↓
-Alertes trading
+Alertes
 
-Le système doit recalculer les scores toutes les 100 à 500 millisecondes.
+Le radar doit recalculer les scores toutes les 100 à 500 millisecondes.
 
 ---
 
@@ -44,20 +48,24 @@ Le système doit recalculer les scores toutes les 100 à 500 millisecondes.
 
 Avant toute analyse avancée, le système doit réduire l’univers d’actions afin de supprimer les titres non pertinents.
 
-L’univers initial peut contenir environ 8000 actions US.
+L’univers initial peut contenir environ :
 
-Le filtre doit réduire cet univers à 200 à 400 actions maximum.
+8000 actions US
+
+Le filtre doit réduire cet univers à environ :
+
+200 à 400 actions
 
 Critères recommandés :
 
 - prix > 0.20$
 - prix < 20$
-- float < 50 millions d’actions
-- volume moyen > 500 000 actions
+- float < 50M
+- volume moyen > 500k
 - action listée sur NASDAQ ou NYSE
 - exclure les actions OTC
 
-Raison :
+Objectif :
 
 Les plus gros runners du marché proviennent généralement des small caps à faible float.
 
@@ -65,9 +73,9 @@ Les plus gros runners du marché proviennent généralement des small caps à fa
 
 2. Feature Engine
 
-Le Feature Engine maintient en mémoire les métriques temps réel pour chaque action.
+Le Feature Engine maintient en mémoire plusieurs métriques temps réel pour chaque action.
 
-Ces données sont mises à jour à chaque transaction ou quote.
+Ces métriques sont mises à jour à chaque nouveau trade ou quote.
 
 Variables principales :
 
@@ -93,6 +101,7 @@ Variables dérivées :
 - bid_ask_ratio
 - float_rotation
 - order_flow_ratio
+- volatility
 
 ---
 
@@ -100,7 +109,7 @@ Variables dérivées :
 
 Le radar est composé de plusieurs modules de détection.
 
-Chaque module détecte un type de signal et contribue au Momentum Score.
+Chaque module produit un signal et contribue au Momentum Score.
 
 ---
 
@@ -116,7 +125,7 @@ Signaux :
 
 - relative_volume > 3 → activité inhabituelle
 - relative_volume > 5 → forte activité
-- relative_volume > 10 → possible breakout
+- relative_volume > 10 → breakout potentiel
 
 Contribution au score :
 
@@ -147,7 +156,7 @@ Contribution au score :
 
 3.3 Liquidity Imbalance
 
-Ce module analyse la pression acheteur/vendeur.
+Ce module analyse la pression acheteur / vendeur.
 
 Calcul :
 
@@ -176,8 +185,6 @@ trade_speed = trades_last_5s / average_trades_5s
 Signal :
 
 trade_speed > 4
-
-Cela signifie que l’activité de trading augmente fortement.
 
 Contribution au score :
 
@@ -250,7 +257,7 @@ Contribution au score :
 
 ---
 
-3.8 Compression Pré-Breakout
+3.8 Pre-Breakout Compression
 
 Avant certains mouvements violents, le prix entre dans une phase de compression.
 
@@ -258,7 +265,7 @@ Pattern :
 
 impulsion
 ↓
-consolidation serrée
+consolidation
 ↓
 compression
 ↓
@@ -266,7 +273,7 @@ breakout
 
 Conditions :
 
-- range très étroit
+- range très serré
 - volume élevé
 - pression acheteur dominante
 
@@ -311,10 +318,15 @@ Ils servent uniquement à augmenter la priorité d’une action.
 Exemples :
 
 - earnings
-- approval FDA
+- annonces FDA
 - partenariats
 - insider buying
 - filings SEC
+
+Sources possibles :
+
+- Finnhub
+- U.S. Securities and Exchange Commission
 
 Contribution au score :
 
@@ -338,7 +350,7 @@ order flow aggression = +2
 compression = +2
 catalyst = +3
 
-momentum_score = somme des points
+Momentum Score = somme des points
 
 ---
 
@@ -353,16 +365,16 @@ score ≥ 9 → breakout très probable
 
 7. Classement des actions
 
-Le radar doit produire une liste classée par score.
+Le radar doit produire une liste d’actions classées par score.
 
 Structure de sortie :
 
-symbol
-momentum_score
-relative_volume
-price_change
-float_rotation
-timestamp
+- symbol
+- momentum_score
+- relative_volume
+- price_change
+- float_rotation
+- timestamp
 
 Exemple :
 
@@ -380,7 +392,7 @@ Cycle :
 
 trade reçu
 ↓
-mise à jour des métriques
+mise à jour des features
 ↓
 recalcul du score
 ↓
@@ -388,7 +400,7 @@ mise à jour du classement
 ↓
 déclenchement des alertes
 
-Fréquence :
+Fréquence recommandée :
 
 100 ms à 500 ms
 
@@ -398,43 +410,43 @@ Fréquence :
 
 Le radar doit adapter ses paramètres selon la session :
 
-Premarket
-Regular Market
-After Hours
-Overnight
+- Premarket
+- Regular Market
+- After Hours
+- Overnight
 
-Les seuils peuvent varier selon la liquidité de la session.
+Les seuils peuvent varier selon la liquidité.
 
 ---
 
 10. Watchlist manuelle
 
-Le système doit permettre d’ajouter manuellement des actions à surveiller.
+Le système doit permettre d’ajouter des actions manuellement.
 
 Exemple :
 
 DGNX → catalyst FDA
 TSLA → earnings
 
-Ces actions doivent être analysées avec une priorité plus élevée.
+Les actions de la watchlist doivent être surveillées avec une fréquence plus élevée.
 
 ---
 
 Objectif final
 
-Le Radar Composite doit détecter le moment où l’accumulation commence sur une action.
+Le Radar Composite doit détecter le moment précis où l’accumulation commence sur une action.
 
 Signaux clés :
 
-augmentation du volume
-pression acheteur
-accélération du trading
-compression du prix
+- volume qui augmente
+- pression acheteur
+- accélération du trading
+- compression du prix
 
 Ce moment précède souvent :
 
-breakout
-top gainer
-short squeeze
+- breakout
+- top gainer
+- short squeeze
 
 GV2-EDGE doit détecter cette phase avant les scanners traditionnels.
